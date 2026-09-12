@@ -1,0 +1,23 @@
+# Postgres local para desarrollo.
+#   docker compose up -d
+#   DATABASE_URL="postgresql://caserita:caserita@localhost:5432/caserita?schema=public"
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: caserita-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: caserita
+      POSTGRES_PASSWORD: caserita
+      POSTGRES_DB: caserita
+    ports:
+      - '5432:5432'
+    volumes:
+      - caserita-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U caserita']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  caserita-db:

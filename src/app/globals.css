@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+
+/*
+ * Caserita — sistema visual.
+ * Movil primero: el jurado y los usuarios abren esto desde el celular, no
+ * desde una laptop. Tipografia grande, botones de dedo, cero ornamento.
+ */
+
+@theme {
+  --color-papel: #faf7f2;
+  --color-papel-2: #f2ede4;
+  --color-tinta: #1c1917;
+  --color-tinta-2: #57534e;
+  --color-tinta-3: #a8a29e;
+  --color-borde: #e7e1d6;
+  --color-superficie: #ffffff;
+
+  --color-verde: #15803d;
+  --color-verde-claro: #dcfce7;
+  --color-verde-oscuro: #14532d;
+  --color-naranja: #ea580c;
+  --color-naranja-claro: #ffedd5;
+  --color-rojo: #b91c1c;
+  --color-rojo-claro: #fee2e2;
+  --color-azul: #1d4ed8;
+  --color-azul-claro: #dbeafe;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+  --radius-caja: 1rem;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    background-color: var(--color-papel);
+  }
+
+  body {
+    background-color: var(--color-papel);
+    color: var(--color-tinta);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Nada de zoom automatico en iOS al enfocar un input. */
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px;
+    font-family: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-verde);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .contenedor {
+    width: 100%;
+    max-width: 30rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  .tarjeta {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radius-caja);
+  }
+
+  .numeros {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+  }
+}

@@ -1,0 +1,57 @@
+/**
+ * Errores de dominio con codigo estable. El `mensaje` esta escrito para que se
+ * pueda mostrar tal cual al usuario: nada de stack traces en la pantalla.
+ */
+export type CodigoError =
+  | 'NO_AUTENTICADO'
+  | 'SIN_PERMISO'
+  | 'NO_ENCONTRADO'
+  | 'DATOS_INVALIDOS'
+  | 'ESTADO_INVALIDO'
+  | 'CODIGO_INCORRECTO'
+  | 'CODIGO_BLOQUEADO'
+  | 'DEPOSITO_NO_ENCONTRADO'
+  | 'DEPOSITO_INSUFICIENTE'
+  | 'DEMASIADOS_INTENTOS'
+  | 'ORIGEN_INVALIDO'
+  | 'CADENA'
+  | 'INTERNO';
+
+const HTTP: Record<CodigoError, number> = {
+  NO_AUTENTICADO: 401,
+  SIN_PERMISO: 403,
+  NO_ENCONTRADO: 404,
+  DATOS_INVALIDOS: 400,
+  ESTADO_INVALIDO: 409,
+  CODIGO_INCORRECTO: 400,
+  CODIGO_BLOQUEADO: 423,
+  DEPOSITO_NO_ENCONTRADO: 404,
+  DEPOSITO_INSUFICIENTE: 409,
+  DEMASIADOS_INTENTOS: 429,
+  ORIGEN_INVALIDO: 403,
+  CADENA: 502,
+  INTERNO: 500,
+};
+
+export class ErrorApp extends Error {
+  readonly codigo: CodigoError;
+  readonly status: number;
+  readonly detalle?: Record<string, unknown>;
+
+  constructor(codigo: CodigoError, mensaje: string, detalle?: Record<string, unknown>) {
+    super(mensaje);
+    this.name = 'ErrorApp';
+    this.codigo = codigo;
+    this.status = HTTP[codigo];
+    this.detalle = detalle;
+  }
+}
+
+export const errores = {
+  noAutenticado: (m = 'Necesitas entrar con tu cuenta.') => new ErrorApp('NO_AUTENTICADO', m),
+  sinPermiso: (m = 'Este trato no es tuyo.') => new ErrorApp('SIN_PERMISO', m),
+  noEncontrado: (m = 'No encontramos ese trato.') => new ErrorApp('NO_ENCONTRADO', m),
+  datosInvalidos: (m: string, d?: Record<string, unknown>) => new ErrorApp('DATOS_INVALIDOS', m, d),
+  estadoInvalido: (m: string, d?: Record<string, unknown>) => new ErrorApp('ESTADO_INVALIDO', m, d),
+  cadena: (m: string, d?: Record<string, unknown>) => new ErrorApp('CADENA', m, d),
+};
