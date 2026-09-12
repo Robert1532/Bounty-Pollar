@@ -1,6 +1,10 @@
 # Postgres local para desarrollo.
 #   docker compose up -d
-#   DATABASE_URL="postgresql://caserita:caserita@localhost:5432/caserita?schema=public"
+#
+# Usa el puerto 5433 del host a proposito: el 5432 casi siempre ya esta ocupado
+# por otro Postgres instalado en la maquina (Odoo, pgAdmin, un proyecto viejo),
+# y cuando eso pasa la app se conecta a la base equivocada y falla con
+# "password authentication failed".
 services:
   db:
     image: postgres:16-alpine
@@ -11,7 +15,7 @@ services:
       POSTGRES_PASSWORD: caserita
       POSTGRES_DB: caserita
     ports:
-      - '5432:5432'
+      - '5433:5432'
     volumes:
       - caserita-db:/var/lib/postgresql/data
     healthcheck:

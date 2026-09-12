@@ -7,6 +7,16 @@
  * En mainnet solo genera el par: fondearla es una decision con plata real y no
  * la toma un script.
  */
+/**
+ * Carga el .env del proyecto. `tsx` no lo hace solo, y sin esto el script no ve
+ * ESCROW_SECRET_KEY ni STELLAR_NETWORK.
+ */
+try {
+  process.loadEnvFile('.env');
+} catch {
+  // Sin .env se usan las variables del shell. No es un error.
+}
+
 import {
   Asset,
   BASE_FEE,

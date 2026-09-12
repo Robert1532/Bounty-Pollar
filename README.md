@@ -214,10 +214,27 @@ cp .env.example .env
 Para ver el flujo completo sin cuenta de Pollar ni cuenta Stellar:
 
 ```bash
-docker compose up -d          # Postgres local
+docker compose up -d          # Postgres local, en el puerto 5433 del host
 npm run db:push               # crea las tablas
-# en .env:  MODO_MOCK="true"  y  NEXT_PUBLIC_MODO_MOCK="true"
 npm run dev
+```
+
+En `.env` alcanza con esto:
+
+```ini
+DATABASE_URL="postgresql://caserita:caserita@localhost:5433/caserita"
+APP_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+SESSION_SECRET="<32+ caracteres al azar>"
+CRON_SECRET="<otro secreto>"
+MODO_MOCK="true"
+NEXT_PUBLIC_MODO_MOCK="true"
+```
+
+Los secretos se generan con:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
 El login y la cadena se simulan, pero **recorren el mismo código**: las mismas transiciones, las mismas validaciones, el mismo log de auditoría. Abre la app en dos navegadores (uno normal y uno de incógnito) para ser vendedor y comprador a la vez.
@@ -247,6 +264,21 @@ npm run db:push      # esquema directo (desarrollo)
 npm run db:generate  # genera la migración SQL
 npm run db:migrate   # aplica migraciones (producción)
 ```
+
+### Problemas comunes
+
+**`password authentication failed for user "caserita"` (código `28P01`).**
+Casi siempre significa que la app se está conectando a *otro* Postgres, no al del
+contenedor: si ya tenés uno instalado en la máquina (Odoo, pgAdmin, un proyecto viejo),
+ese ocupa el 5432 y se lleva la conexión. Por eso el `docker-compose.yml` publica el
+**5433**. Revisá que `DATABASE_URL` diga `localhost:5433` y que el contenedor esté arriba
+(`docker compose ps`). Si igual falla, `docker compose down -v && docker compose up -d`
+para recrear el volumen con la contraseña actual.
+
+**`[PollarClient] constructor() called server-side`.** Es un aviso del SDK durante el
+render en servidor, no un error. No rompe nada.
+
+**Cambiaste el `.env` y no pasa nada.** Next lee el `.env` al arrancar: reiniciá `npm run dev`.
 
 ---
 

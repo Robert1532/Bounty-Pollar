@@ -6,6 +6,16 @@
  * Sirve para dos cosas: revisar antes del demo que hay XLM para los fees, y
  * cuadrar que el USDC retenido coincide con los tratos en custodia.
  */
+/**
+ * Carga el .env del proyecto. `tsx` no lo hace solo, y sin esto el script no ve
+ * ESCROW_SECRET_KEY ni STELLAR_NETWORK.
+ */
+try {
+  process.loadEnvFile('.env');
+} catch {
+  // Sin .env se usan las variables del shell. No es un error.
+}
+
 import { Horizon, Keypair, Networks } from '@stellar/stellar-sdk';
 
 const red = (process.env.STELLAR_NETWORK ?? 'testnet') as 'testnet' | 'mainnet';
