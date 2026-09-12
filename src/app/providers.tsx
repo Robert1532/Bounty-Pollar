@@ -1,12 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { PollarProvider, usePollar } from '@pollar/react';
 import { ContextoSesion, type EstadoSesion } from '@/lib/cliente/sesion';
 import type { ConfigPublica, TratoPublico, UsuarioSesion } from '@/lib/cliente/tipos';
 import { ErrorApi, del, get, post } from '@/lib/cliente/api';
 
 const CLAVE_MOCK = 'caserita:wallet-demo';
+const ERROR_WALLET_NO_ACTIVA =
+  'Tu wallet Pollar todavía no está activada en testnet. Actívala desde Account Funding.';
 
 /**
  * Dos implementaciones de la misma sesion: la real, sobre Pollar, y la
@@ -49,8 +52,11 @@ function useBase() {
   }, [refrescar]);
 
   const salir = useCallback(async () => {
-    await del('/api/auth/sesion').catch(() => undefined);
-    setUsuario(null);
+    try {
+      await del('/api/auth/sesion');
+    } finally {
+      setUsuario(null);
+    }
   }, []);
 
   return { usuario, setUsuario, config, cargando, ocupado, setOcupado, error, setError, refrescar, salir };
@@ -64,8 +70,90 @@ function mensajeDe(e: unknown): string {
 
 function ProveedorPollar({ children }: { children: ReactNode }) {
   const base = useBase();
-  const { login, logout, isAuthenticated, wallet, getClient, runTx, openTxHistoryModal } = usePollar();
+  const setErrorBase = base.setError;
+  const setOcupadoBase = base.setOcupado;
+  const router = useRouter();
+  const {
+    login,
+    isAuthenticated,
+    verified,
+    wallet,
+    enabledAssets,
+    setTrustline,
+    refreshAssets,
+    getClient,
+    runTx,
+    openTxHistoryModal,
+  } = usePollar();
   const [esperandoLogin, setEsperandoLogin] = useState(false);
+  const trustlineIntentada = useRef<string | null>(null);
+
+  // `login()` inicia un flujo asíncrono y no devuelve una promesa. Escuchamos
+  // su máquina de estados para no dejar la interfaz congelada si el popup se
+  // bloquea, vence el tiempo o Pollar rechaza la autenticación.
+  useEffect(() => {
+    return getClient().onAuthStateChange((estado) => {
+      if (estado.step !== 'error') return;
+      setEsperandoLogin(false);
+      setOcupadoBase(false);
+      setErrorBase(estado.message || 'No pudimos iniciar sesión con Pollar.');
+    });
+  }, [getClient, setErrorBase, setOcupadoBase]);
+
+  // Una cuenta patrocinada puede existir con 0 XLM, pero aun necesita aceptar
+  // el USDC. Pollar decide en el servidor si la app cubre la reserva y el fee;
+  // esta llamada nunca usa la clave de la custodia ni una seed del usuario.
+  useEffect(() => {
+    const asset = base.config?.asset;
+    if (!base.usuario || !verified || !wallet?.address || !asset?.issuer) return;
+    if (enabledAssets.step === 'idle') {
+      void refreshAssets();
+      return;
+    }
+    if (enabledAssets.step === 'error') {
+      setErrorBase('Pollar no pudo leer los activos habilitados para esta wallet.');
+      return;
+    }
+    if (enabledAssets.step !== 'loaded') return;
+    if (!enabledAssets.data.exists) {
+      setErrorBase(ERROR_WALLET_NO_ACTIVA);
+      return;
+    }
+    if (base.error === ERROR_WALLET_NO_ACTIVA) setErrorBase(null);
+
+    const existente = enabledAssets.data.assets.find(
+      (item) => item.code === asset.code && item.issuer === asset.issuer,
+    );
+    if (existente?.trustlineEstablished) return;
+
+    const clave = `${wallet.address}:${asset.code}:${asset.issuer}`;
+    if (trustlineIntentada.current === clave) return;
+    trustlineIntentada.current = clave;
+    setOcupadoBase(true);
+
+    void setTrustline({ code: asset.code, issuer: asset.issuer })
+      .then(async (resultado) => {
+        if (resultado.status === 'error') {
+          throw new Error(resultado.details || 'Pollar no pudo crear la trustline.');
+        }
+        await refreshAssets();
+      })
+      .catch(() => {
+        setErrorBase('Tu wallet existe, pero Pollar no pudo habilitar USDC. Revisa Tokens & Trustlines.');
+      })
+      .finally(() => setOcupadoBase(false));
+  }, [
+    base.config?.asset,
+    base.error,
+    base.usuario,
+    enabledAssets,
+    refreshAssets,
+    setErrorBase,
+    setOcupadoBase,
+    setTrustline,
+    verified,
+    wallet?.address,
+  ]);
 
   /**
    * Prueba de propiedad de la wallet.
@@ -91,13 +179,8 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       });
       base.setUsuario(usuario);
 
-      // Funding mode Deferred: la cuenta existe pero sin reserva. El patrocinio
-      // se pide desde el backend, que es donde vive la clave secreta.
-      if (wallet?.fundingMode === 'DEFERRED' || wallet?.existsOnStellar === false) {
-        await post('/api/pollar/activar').catch(() => undefined);
-      }
     },
-    [base, getClient, wallet?.fundingMode, wallet?.existsOnStellar],
+    [base, getClient],
   );
 
   // Cuando Pollar termina el login (popup de Google), se abre la sesion propia.
@@ -128,13 +211,16 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
   }, [abrirSesion, base, isAuthenticated, login, wallet?.address]);
 
   const salir = useCallback(async () => {
-    await base.salir();
-    try {
-      logout();
-    } catch {
-      /* la sesion del backend ya esta cerrada */
+    base.setError(null);
+    base.setOcupado(true);
+    const [backend, pollar] = await Promise.allSettled([base.salir(), getClient().logout()]);
+    base.setOcupado(false);
+    router.replace('/');
+    router.refresh();
+    if (backend.status === 'rejected' || pollar.status === 'rejected') {
+      base.setError('No pudimos cerrar por completo la sesión. Refresca e inténtalo otra vez.');
     }
-  }, [base, logout]);
+  }, [base, getClient, router]);
 
   /**
    * El pago del comprador: un `payment` de USDC a la cuenta de custodia con el
@@ -185,6 +271,7 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
 
 function ProveedorMock({ children }: { children: ReactNode }) {
   const base = useBase();
+  const router = useRouter();
 
   const entrar = useCallback(async () => {
     base.setError(null);
@@ -214,6 +301,21 @@ function ProveedorMock({ children }: { children: ReactNode }) {
     [base.usuario],
   );
 
+  const salir = useCallback(async () => {
+    base.setError(null);
+    base.setOcupado(true);
+    try {
+      await base.salir();
+      window.localStorage.removeItem(CLAVE_MOCK);
+      router.replace('/');
+      router.refresh();
+    } catch (e) {
+      base.setError(mensajeDe(e));
+    } finally {
+      base.setOcupado(false);
+    }
+  }, [base, router]);
+
   const valor: EstadoSesion = useMemo(
     () => ({
       usuario: base.usuario,
@@ -223,12 +325,12 @@ function ProveedorMock({ children }: { children: ReactNode }) {
       error: base.error,
       modoMock: true,
       entrar,
-      salir: base.salir,
+      salir,
       pagar,
       abrirHistorial: null,
       refrescar: base.refrescar,
     }),
-    [base, entrar, pagar],
+    [base, entrar, pagar, salir],
   );
 
   return <ContextoSesion.Provider value={valor}>{children}</ContextoSesion.Provider>;

@@ -48,6 +48,8 @@ export default function Inicio() {
     <>
       <Encabezado />
       <main className="contenedor space-y-4 py-5 pb-28">
+        {error && <Aviso tono="error">{error}</Aviso>}
+
         <div className="flex rounded-2xl bg-papel-2 p-1 text-sm font-semibold">
           {(['vendo', 'compro'] as const).map((p) => (
             <button

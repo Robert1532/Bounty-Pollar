@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import type { DepositoEncontrado, ResultadoEnvio } from './tipos';
+import { aStroops } from '../money';
+import type { DepositoEncontrado, ResultadoBusquedaDeposito, ResultadoEnvio } from './tipos';
 
 /**
  * Cadena simulada para poder recorrer el flujo completo sin claves de Pollar ni
@@ -34,16 +35,26 @@ export function registrarDepositoMock(params: { memo: string; monto: string; des
   return deposito;
 }
 
-export function buscarDepositoMock(memo: string): DepositoEncontrado | null {
-  const encontrado = depositos.find((d) => d.memo === memo);
-  if (!encontrado) return null;
-  return {
+function resultadoDeposito(encontrado: DepositoMock | undefined, montoEsperado: string): ResultadoBusquedaDeposito {
+  if (!encontrado) return { estado: 'NO_ENCONTRADO' };
+  const deposito: DepositoEncontrado = {
     hash: encontrado.hash,
     monto: encontrado.monto,
     desde: encontrado.desde,
     memo: encontrado.memo,
     creadoEn: new Date(encontrado.creadoEn).toISOString(),
   };
+  return aStroops(encontrado.monto) === aStroops(montoEsperado)
+    ? { estado: 'ENCONTRADO', deposito }
+    : { estado: 'MONTO_INCORRECTO', deposito };
+}
+
+export function buscarDepositoMock(memo: string, montoEsperado: string): ResultadoBusquedaDeposito {
+  return resultadoDeposito(depositos.find((d) => d.memo === memo), montoEsperado);
+}
+
+export function buscarDepositoMockPorHash(hash: string, montoEsperado: string): ResultadoBusquedaDeposito {
+  return resultadoDeposito(depositos.find((d) => d.hash === hash), montoEsperado);
 }
 
 export function enviarMock(): ResultadoEnvio {

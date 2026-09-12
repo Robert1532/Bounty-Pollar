@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Encabezado } from '@/components/Encabezado';
 import { Aviso } from '@/components/ui/Aviso';
-import { Boton } from '@/components/ui/Boton';
+import { Boton, Spinner } from '@/components/ui/Boton';
 import { AreaTexto, Campo } from '@/components/ui/Campo';
 import { useSesion } from '@/lib/cliente/sesion';
 import { post } from '@/lib/cliente/api';
@@ -12,7 +12,7 @@ import type { TratoPublico } from '@/lib/cliente/tipos';
 
 export default function NuevoTrato() {
   const router = useRouter();
-  const { usuario, config, entrar, ocupado } = useSesion();
+  const { usuario, config, cargando } = useSesion();
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -29,6 +29,10 @@ export default function NuevoTrato() {
       ? `≈ ${(n / config.tipoCambioBs).toFixed(2)} USDC`
       : `≈ Bs ${(n * config.tipoCambioBs).toFixed(2)}`;
   }, [monto, moneda, config]);
+
+  useEffect(() => {
+    if (!cargando && !usuario) router.replace('/');
+  }, [cargando, router, usuario]);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
@@ -49,15 +53,12 @@ export default function NuevoTrato() {
     }
   }
 
-  if (!usuario) {
+  if (cargando || !usuario) {
     return (
       <>
         <Encabezado />
-        <main className="contenedor space-y-4 py-10">
-          <Aviso tono="info">Entra con tu cuenta para crear un trato.</Aviso>
-          <Boton onClick={() => void entrar()} cargando={ocupado}>
-            Entrar con Google
-          </Boton>
+        <main className="contenedor grid place-items-center py-24">
+          <Spinner />
         </main>
       </>
     );

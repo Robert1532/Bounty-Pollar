@@ -12,7 +12,7 @@ import { log } from '../logger';
 import { errores } from '../errors';
 import { aStroops } from '../money';
 import { assetUsdc, passphraseRed } from './asset';
-import type { DepositoEncontrado, ResultadoEnvio } from './tipos';
+import type { DepositoEncontrado, ResultadoBusquedaDeposito, ResultadoEnvio } from './tipos';
 
 let servidor: Horizon.Server | null = null;
 
@@ -36,12 +36,13 @@ export function parEscrow(): Keypair {
  */
 export async function buscarDeposito(params: {
   memo: string;
-  montoMinimo: string;
+  montoEsperado: string;
   limite?: number;
-}): Promise<DepositoEncontrado | null> {
+}): Promise<ResultadoBusquedaDeposito> {
   const escrow = parEscrow().publicKey();
   const usdc = assetUsdc();
-  const minimo = aStroops(params.montoMinimo);
+  const esperado = aStroops(params.montoEsperado);
+  let montoIncorrecto: DepositoEncontrado | null = null;
 
   let pagina = await horizon()
     .payments()
@@ -67,25 +68,63 @@ export async function buscarDeposito(params: {
       const memo = tx?.memo;
       if (memo !== params.memo) continue;
 
-      if (aStroops(registro.amount) < minimo) {
-        log.warn('depósito con monto insuficiente', { memo: params.memo, monto: registro.amount });
-        continue;
-      }
-
-      return {
+      const deposito: DepositoEncontrado = {
         hash: registro.transaction_hash,
         monto: registro.amount,
         desde: registro.from,
         memo: params.memo,
         creadoEn: registro.created_at,
       };
+
+      if (aStroops(registro.amount) !== esperado) {
+        montoIncorrecto ??= deposito;
+        log.warn('depósito con monto incorrecto', { memo: params.memo, monto: registro.amount });
+        continue;
+      }
+      return { estado: 'ENCONTRADO', deposito };
     }
 
     if (pagina.records.length === 0) break;
     pagina = await pagina.next();
   }
 
-  return null;
+  return montoIncorrecto
+    ? { estado: 'MONTO_INCORRECTO', deposito: montoIncorrecto }
+    : { estado: 'NO_ENCONTRADO' };
+}
+
+/** Busca primero por hash, pero valida todos los datos contra Horizon. */
+export async function buscarDepositoPorHash(params: {
+  hash: string;
+  memo: string;
+  montoEsperado: string;
+}): Promise<ResultadoBusquedaDeposito> {
+  let tx;
+  try {
+    tx = await horizon().transactions().transaction(params.hash).call();
+  } catch {
+    return { estado: 'NO_ENCONTRADO' };
+  }
+  if (!tx.successful || tx.memo !== params.memo) return { estado: 'NO_ENCONTRADO' };
+
+  const escrow = parEscrow().publicKey();
+  const usdc = assetUsdc();
+  const pagina = await horizon().payments().forTransaction(params.hash).limit(200).call();
+  for (const registro of pagina.records) {
+    if (registro.type !== 'payment' || registro.to !== escrow || registro.asset_type === 'native') continue;
+    if (registro.asset_code !== usdc.getCode() || registro.asset_issuer !== usdc.getIssuer()) continue;
+    const deposito: DepositoEncontrado = {
+      hash: registro.transaction_hash,
+      monto: registro.amount,
+      desde: registro.from,
+      memo: params.memo,
+      creadoEn: registro.created_at,
+    };
+    return aStroops(registro.amount) === aStroops(params.montoEsperado)
+      ? { estado: 'ENCONTRADO', deposito }
+      : { estado: 'MONTO_INCORRECTO', deposito };
+  }
+  return { estado: 'NO_ENCONTRADO' };
 }
 
 /**
@@ -125,7 +164,15 @@ export async function enviarDesdeEscrow(params: {
 
   tx.sign(par);
   const hash = Buffer.from(tx.hash()).toString('hex');
-  await params.alConstruir?.(hash);
+  try {
+    await params.alConstruir?.(hash);
+  } catch (error) {
+    throw errores.cadena('No se pudo guardar la operación antes de enviarla.', {
+      hash,
+      resultado: 'NO_ENVIADA',
+      causa: error instanceof Error ? error.message : 'desconocida',
+    });
+  }
 
   try {
     const respuesta = await horizon().submitTransaction(tx);
@@ -133,7 +180,11 @@ export async function enviarDesdeEscrow(params: {
   } catch (error) {
     const detalle = extraerDetalleHorizon(error);
     log.error('fallo el envio desde la custodia', { destino: params.destino, hash, detalle });
-    throw errores.cadena(mensajeAmigable(detalle), { hash, detalle });
+    throw errores.cadena(mensajeAmigable(detalle), {
+      hash,
+      detalle,
+      resultado: detalle.length > 0 ? 'FALLIDA' : 'DESCONOCIDA',
+    });
   }
 }
 

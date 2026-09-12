@@ -30,10 +30,11 @@ export function Encabezado() {
           ) : usuario ? (
             <button
               onClick={() => void salir()}
-              className="números rounded-full bg-papel-2 px-3 py-1.5 text-xs font-semibold text-tinta-2"
-              title={usuario.direccion}
+              disabled={ocupado}
+              className="rounded-full bg-papel-2 px-3 py-1.5 text-xs font-semibold text-tinta-2 disabled:opacity-50"
+              title={`Cerrar sesión de ${usuario.direccion}`}
             >
-              {acortar(usuario.direccion)}
+              {ocupado ? <Spinner /> : `Salir · ${acortar(usuario.direccion)}`}
             </button>
           ) : (
             <button

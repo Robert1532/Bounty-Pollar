@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Aviso } from './ui/Aviso';
 import { Boton } from './ui/Boton';
 import { useSesion } from '@/lib/cliente/sesion';
-import { post } from '@/lib/cliente/api';
+import { ErrorApi, post } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 
 /**
@@ -22,10 +22,10 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
 
   const esVendedor = trato.rol === 'vendedor';
 
-  async function confirmarConReintentos(intentos = 6): Promise<void> {
+  async function confirmarConReintentos(hash?: string, intentos = 6): Promise<void> {
     for (let i = 0; i < intentos; i++) {
       try {
-        const actualizado = await post<TratoPublico>(`/api/tratos/${trato.id}/confirmar`, {});
+        const actualizado = await post<TratoPublico>(`/api/tratos/${trato.id}/confirmar`, hash ? { hash } : {});
         if (actualizado.estado !== 'PUBLICADO') {
           alActualizar(actualizado);
           return;
@@ -42,9 +42,19 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
     setError(null);
     setPaso('pagando');
     try {
-      await pagar(trato);
+      // Antes de crear otro pago, se comprueba si uno anterior ya llegó. Solo
+      // DEPOSITO_NO_ENCONTRADO habilita una transferencia nueva.
+      try {
+        const existente = await post<TratoPublico>(`/api/tratos/${trato.id}/confirmar`, {});
+        alActualizar(existente);
+        return;
+      } catch (e) {
+        if (!(e instanceof ErrorApi) || e.codigo !== 'DEPOSITO_NO_ENCONTRADO') throw e;
+      }
+
+      const hash = await pagar(trato);
       setPaso('confirmando');
-      await confirmarConReintentos();
+      await confirmarConReintentos(hash);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No pudimos completar el pago.');
     } finally {

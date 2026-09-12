@@ -10,6 +10,16 @@ import { serverEnv } from './env';
 export const COOKIE_SESION = '__Host-caserita_sesion';
 const DURACION_SEGUNDOS = 60 * 60 * 12; // 12 horas
 
+export function opcionesCookieSesion(seguro: boolean, maxAge: number) {
+  return {
+    httpOnly: true as const,
+    secure: seguro,
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge,
+  };
+}
+
 export interface Sesion {
   userId: string;
   direccion: string;
@@ -61,17 +71,13 @@ export function nombreCookie(): string {
 export async function guardarCookieSesion(token: string): Promise<void> {
   const seguro = serverEnv().APP_URL.startsWith('https://');
   const store = await cookies();
-  store.set(nombreCookie(), token, {
-    httpOnly: true,
-    secure: seguro,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: DURACION_SEGUNDOS,
-  });
+  store.set(nombreCookie(), token, opcionesCookieSesion(seguro, DURACION_SEGUNDOS));
 }
 
 export async function borrarCookieSesion(): Promise<void> {
   const store = await cookies();
-  store.set(nombreCookie(), '', { httpOnly: true, path: '/', maxAge: 0 });
-  store.set('caserita_sesion', '', { httpOnly: true, path: '/', maxAge: 0 });
+  // Una cookie con prefijo __Host- también debe llevar Secure al eliminarla;
+  // de lo contrario los navegadores pueden rechazar el Set-Cookie de borrado.
+  store.set(COOKIE_SESION, '', opcionesCookieSesion(true, 0));
+  store.set('caserita_sesion', '', opcionesCookieSesion(false, 0));
 }

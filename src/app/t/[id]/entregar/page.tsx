@@ -7,6 +7,7 @@ import { Encabezado } from '@/components/Encabezado';
 import { Aviso } from '@/components/ui/Aviso';
 import { Boton, Spinner } from '@/components/ui/Boton';
 import { get, post } from '@/lib/cliente/api';
+import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 
 /**
@@ -17,6 +18,7 @@ import type { TratoPublico } from '@/lib/cliente/tipos';
 export default function Entregar({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { usuario, cargando } = useSesion();
 
   const [trato, setTrato] = useState<TratoPublico | null>(null);
   const [digitos, setDigitos] = useState<string[]>(Array(6).fill(''));
@@ -29,6 +31,10 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
       .then(setTrato)
       .catch((e) => setError(e instanceof Error ? e.message : 'No encontramos ese trato.'));
   }, [id]);
+
+  useEffect(() => {
+    if (!cargando && !usuario) router.replace('/');
+  }, [cargando, router, usuario]);
 
   function escribir(indice: number, valor: string) {
     const limpio = valor.replace(/\D/g, '');
@@ -68,7 +74,7 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
     }
   }
 
-  if (!trato) {
+  if (cargando || !usuario || !trato) {
     return (
       <>
         <Encabezado />

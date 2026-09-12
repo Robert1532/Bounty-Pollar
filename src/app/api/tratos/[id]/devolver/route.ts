@@ -10,9 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Devolucion acordada: el comprador suelta la plata antes del plazo porque el
- * vendedor no entrego y los dos lo aceptan. La devolucion por plazo vencido la
- * dispara el cron, no esta ruta.
+ * Permite a una de las partes empujar una devolución cuando el plazo ya
+ * venció. La misma regla temporal protege la ruta y el cron.
  */
 export async function POST(
   req: Request,
@@ -24,10 +23,10 @@ export async function POST(
     const { id } = await ctx.params;
     const tratoId = idTrato.parse(id);
 
-    const { motivo } = await leerJson(req, devolverSchema).catch(() => ({ motivo: 'ACORDADA' as const }));
+    await leerJson(req, devolverSchema);
     const trato = await devolver({
       id: tratoId,
-      motivo: motivo === 'PLAZO_VENCIDO' ? 'PLAZO_VENCIDO' : 'ACORDADA',
+      motivo: 'PLAZO_VENCIDO',
       actor: usuario,
       ip: ipDe(req),
     });

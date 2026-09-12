@@ -45,17 +45,13 @@ export const liberarSchema = z
 
 export const confirmarSchema = z
   .object({
-    /** Referencia opcional que manda el cliente. Se usa solo para el log: la
-     *  verdad del deposito se lee siempre de la red. */
+    /** Acelera la búsqueda, pero cada dato de esa transacción se vuelve a
+     * validar contra Horizon antes de financiar el trato. */
     hash: z.string().trim().length(64).optional(),
   })
   .strict();
 
-export const devolverSchema = z
-  .object({
-    motivo: z.enum(['PLAZO_VENCIDO', 'ACORDADA']).default('ACORDADA'),
-  })
-  .strict();
+export const devolverSchema = z.object({}).strict();
 
 export const sesionSchema = z
   .object({

@@ -1,9 +1,9 @@
 import { serverEnv } from '../env';
 import * as horizon from './horizon';
 import * as mock from './mock';
-import type { DepositoEncontrado, ResultadoEnvio } from './tipos';
+import type { ResultadoBusquedaDeposito, ResultadoEnvio } from './tipos';
 
-export type { DepositoEncontrado, ResultadoEnvio } from './tipos';
+export type { DepositoEncontrado, ResultadoBusquedaDeposito, ResultadoEnvio } from './tipos';
 
 /**
  * Fachada de la cadena. Todo el resto de la app habla con estas cuatro
@@ -22,9 +22,15 @@ export function direccionEscrow(): string {
 
 export async function buscarDeposito(params: {
   memo: string;
-  montoMinimo: string;
-}): Promise<DepositoEncontrado | null> {
-  if (esMock()) return mock.buscarDepositoMock(params.memo);
+  montoEsperado: string;
+  hash?: string;
+}): Promise<ResultadoBusquedaDeposito> {
+  if (esMock()) {
+    return params.hash
+      ? mock.buscarDepositoMockPorHash(params.hash, params.montoEsperado)
+      : mock.buscarDepositoMock(params.memo, params.montoEsperado);
+  }
+  if (params.hash) return horizon.buscarDepositoPorHash({ ...params, hash: params.hash });
   return horizon.buscarDeposito(params);
 }
 
@@ -36,7 +42,16 @@ export async function enviarDesdeEscrow(params: {
 }): Promise<ResultadoEnvio> {
   if (esMock()) {
     const resultado = mock.enviarMock();
-    await params.alConstruir?.(resultado.hash);
+    try {
+      await params.alConstruir?.(resultado.hash);
+    } catch (error) {
+      const { errores } = await import('../errors');
+      throw errores.cadena('No se pudo guardar la operación antes de enviarla.', {
+        hash: resultado.hash,
+        resultado: 'NO_ENVIADA',
+        causa: error instanceof Error ? error.message : 'desconocida',
+      });
+    }
     return resultado;
   }
   return horizon.enviarDesdeEscrow(params);

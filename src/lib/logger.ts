@@ -4,7 +4,27 @@ const ORDEN: Record<Nivel, number> = { debug: 10, info: 20, warn: 30, error: 40 
 const MINIMO: Nivel = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
 
 /** Claves que nunca deben salir en un log, ni en desarrollo. */
-const SENSIBLES = /^(codigo|password|secret|secretKey|authorization|cookie|token|signature)$/i;
+const PALABRAS_SENSIBLES = new Set([
+  'codigo',
+  'password',
+  'secret',
+  'authorization',
+  'cookie',
+  'token',
+  'signature',
+  'firma',
+  'seed',
+]);
+
+function esClaveSensible(clave: string): boolean {
+  const normalizada = clave
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_');
+  const palabras = normalizada.split('_').filter(Boolean);
+  return palabras.some((palabra) => PALABRAS_SENSIBLES.has(palabra)) ||
+    (palabras.includes('private') && palabras.includes('key'));
+}
 
 function sanitizar(valor: unknown, profundidad = 0): unknown {
   if (profundidad > 4) return '[...]';
@@ -30,7 +50,7 @@ function sanitizar(valor: unknown, profundidad = 0): unknown {
     return Object.fromEntries(
       Object.entries(valor as Record<string, unknown>).map(([k, v]) => [
         k,
-        SENSIBLES.test(k) ? '[oculto]' : sanitizar(v, profundidad + 1),
+        esClaveSensible(k) ? '[oculto]' : sanitizar(v, profundidad + 1),
       ]),
     );
   }

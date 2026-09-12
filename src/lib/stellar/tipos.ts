@@ -8,6 +8,11 @@ export interface DepositoEncontrado {
   creadoEn: string;
 }
 
+export type ResultadoBusquedaDeposito =
+  | { estado: 'ENCONTRADO'; deposito: DepositoEncontrado }
+  | { estado: 'MONTO_INCORRECTO'; deposito: DepositoEncontrado }
+  | { estado: 'NO_ENCONTRADO' };
+
 export interface ResultadoEnvio {
   hash: string;
   exitoso: boolean;

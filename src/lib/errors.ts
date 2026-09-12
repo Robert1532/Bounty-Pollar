@@ -12,6 +12,7 @@ export type CodigoError =
   | 'CODIGO_BLOQUEADO'
   | 'DEPOSITO_NO_ENCONTRADO'
   | 'DEPOSITO_INSUFICIENTE'
+  | 'MONTO_INCORRECTO'
   | 'DEMASIADOS_INTENTOS'
   | 'ORIGEN_INVALIDO'
   | 'CADENA'
@@ -27,6 +28,7 @@ const HTTP: Record<CodigoError, number> = {
   CODIGO_BLOQUEADO: 423,
   DEPOSITO_NO_ENCONTRADO: 404,
   DEPOSITO_INSUFICIENTE: 409,
+  MONTO_INCORRECTO: 409,
   DEMASIADOS_INTENTOS: 429,
   ORIGEN_INVALIDO: 403,
   CADENA: 502,
@@ -53,5 +55,8 @@ export const errores = {
   noEncontrado: (m = 'No encontramos ese trato.') => new ErrorApp('NO_ENCONTRADO', m),
   datosInvalidos: (m: string, d?: Record<string, unknown>) => new ErrorApp('DATOS_INVALIDOS', m, d),
   estadoInvalido: (m: string, d?: Record<string, unknown>) => new ErrorApp('ESTADO_INVALIDO', m, d),
+  depositoNoEncontrado: (m = 'Todavía no vemos el pago en la red.') =>
+    new ErrorApp('DEPOSITO_NO_ENCONTRADO', m),
+  montoIncorrecto: (m: string, d?: Record<string, unknown>) => new ErrorApp('MONTO_INCORRECTO', m, d),
   cadena: (m: string, d?: Record<string, unknown>) => new ErrorApp('CADENA', m, d),
 };

@@ -32,8 +32,8 @@ export async function POST(
       throw new ErrorApp('DEMASIADOS_INTENTOS', 'Estamos mirando la red muy seguido. Espera unos segundos.');
     }
 
-    await leerJson(req, confirmarSchema).catch(() => ({}));
-    const trato = await confirmarDeposito({ id: tratoId, actor: usuario, ip });
+    const { hash } = await leerJson(req, confirmarSchema);
+    const trato = await confirmarDeposito({ id: tratoId, hash, actor: usuario, ip });
     return ok(aTratoPublico(trato, usuario));
   } catch (error) {
     return manejarError(error);

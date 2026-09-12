@@ -1,5 +1,5 @@
-import { and, desc, eq, isNull, lte, sql as sqlRaw } from 'drizzle-orm';
-import { db, tratos, type EstadoTrato, type MotivoDevolucion, type Trato, type User } from '@/db';
+import { and, desc, eq, inArray, isNull, lte, sql as sqlRaw } from 'drizzle-orm';
+import { db, tratos, type EstadoTrato, type Trato, type User } from '@/db';
 import { serverEnv } from '../env';
 import { ErrorApp, errores } from '../errors';
 import { log } from '../logger';
@@ -9,9 +9,10 @@ import { cifrar, descifrar } from '../cripto';
 import { generarCodigo, hashearCodigo, MAX_INTENTOS, verificarCodigo } from '../codigo';
 import { nuevoIdTrato } from '../ids';
 import { aStroops, bsAUsdc, normalizarMonto } from '../money';
-import { buscarDeposito, direccionEscrow, enviarDesdeEscrow } from '../stellar';
+import { buscarDeposito, consultarTx, direccionEscrow, enviarDesdeEscrow } from '../stellar';
 import type { CrearTratoInput } from '../validaciones';
 import { tienePlataRetenida } from './estado';
+import { decidirRecuperacion, plazoDevolucionVencido } from './politicas';
 
 /**
  * Toda la logica de negocio del trato. Las rutas de API solo autentican,
@@ -115,8 +116,10 @@ export async function listarTratosDe(userId: string): Promise<{ vendo: Trato[]; 
  */
 export async function confirmarDeposito(params: {
   id: string;
+  hash?: string;
   actor?: User | null;
   ip?: string | null;
+  silencioso?: boolean;
 }): Promise<Trato> {
   const trato = await obtenerTrato(params.id);
 
@@ -127,20 +130,48 @@ export async function confirmarDeposito(params: {
     throw errores.estadoInvalido('Este trato ya no acepta pagos.');
   }
 
-  const deposito = await buscarDeposito({ memo: trato.memo, montoMinimo: trato.montoUsdc });
+  const busqueda = await buscarDeposito({
+    memo: trato.memo,
+    montoEsperado: trato.montoUsdc,
+    hash: params.hash,
+  });
 
-  if (!deposito) {
-    await registrarEvento({
-      tratoId: trato.id,
-      tipo: 'DEPOSITO_RECHAZADO',
-      payload: { motivo: 'no_encontrado', memo: trato.memo },
-      actorAddr: params.actor?.walletAddress,
-      ip: params.ip,
-    });
-    throw errores.estadoInvalido(
+  if (busqueda.estado === 'NO_ENCONTRADO') {
+    if (!params.silencioso) {
+      await registrarEvento({
+        tratoId: trato.id,
+        tipo: 'DEPOSITO_RECHAZADO',
+        payload: { motivo: 'no_encontrado', memo: trato.memo, hash: params.hash },
+        actorAddr: params.actor?.walletAddress,
+        ip: params.ip,
+      });
+    }
+    throw errores.depositoNoEncontrado(
       'Todavía no vemos el pago en la red. Si acabas de pagar, espera unos segundos: volvemos a mirar solos.',
     );
   }
+
+  if (busqueda.estado === 'MONTO_INCORRECTO') {
+    const deposito = busqueda.deposito;
+    await registrarEvento({
+      tratoId: trato.id,
+      tipo: 'DEPOSITO_RECHAZADO',
+      payload: {
+        motivo: 'monto_incorrecto',
+        esperado: trato.montoUsdc,
+        recibido: deposito.monto,
+        hash: deposito.hash,
+      },
+      actorAddr: deposito.desde,
+      ip: params.ip,
+    });
+    throw errores.montoIncorrecto(
+      `El depósito debe ser exactamente ${normalizarMonto(trato.montoUsdc)} USDC. No se acreditó automáticamente.`,
+      { hash: deposito.hash },
+    );
+  }
+
+  const deposito = busqueda.deposito;
 
   const env = serverEnv();
   const comprador = await asegurarWallet(deposito.desde);
@@ -187,10 +218,23 @@ export async function liberar(params: {
   actor: User;
   ip?: string | null;
 }): Promise<Trato> {
-  const trato = await obtenerTrato(params.id);
+  let trato = await obtenerTrato(params.id);
 
   if (trato.vendedorId !== params.actor.id) throw errores.sinPermiso('Solo el vendedor libera el pago.');
   if (trato.estado === 'LIBERADO') return trato;
+  if (trato.estado === 'LIBERANDO') {
+    trato = await recuperarMovimiento({
+      trato,
+      desde: 'LIBERANDO',
+      hacia: 'LIBERADO',
+      campoTx: 'txLiberacion',
+      tipoOk: 'LIBERACION_COMPLETADA',
+      tipoFalla: 'LIBERACION_FALLIDA',
+      actor: params.actor.walletAddress,
+      ip: params.ip,
+    });
+    if (trato.estado === 'LIBERADO') return trato;
+  }
   if (trato.estado !== 'FINANCIADO') throw errores.estadoInvalido('Este trato no tiene plata lista para liberar.');
   if (trato.codigoBloqueado) {
     throw new ErrorApp(
@@ -263,29 +307,39 @@ export async function liberar(params: {
 }
 
 /**
- * Devolucion: por plazo vencido (la dispara el cron) o acordada (la dispara el
- * comprador). En los dos casos la plata vuelve a la direccion que realmente
- * pago, leida de la red.
+ * Devolucion por plazo vencido: la dispara el cron o una de las partes desde
+ * la interfaz. La plata vuelve a la direccion que realmente pago, leida de la
+ * red.
  */
 export async function devolver(params: {
   id: string;
-  motivo: MotivoDevolucion;
+  motivo: 'PLAZO_VENCIDO';
   actor?: User | null;
   ip?: string | null;
 }): Promise<Trato> {
-  const trato = await obtenerTrato(params.id);
+  let trato = await obtenerTrato(params.id);
 
   if (trato.estado === 'DEVUELTO') return trato;
+  if (trato.estado === 'DEVOLVIENDO') {
+    trato = await recuperarMovimiento({
+      trato,
+      desde: 'DEVOLVIENDO',
+      hacia: 'DEVUELTO',
+      campoTx: 'txDevolucion',
+      tipoOk: 'DEVOLUCION_COMPLETADA',
+      tipoFalla: 'DEVOLUCION_FALLIDA',
+      actor: params.actor?.walletAddress ?? 'sistema',
+      ip: params.ip,
+    });
+    if (trato.estado === 'DEVUELTO') return trato;
+  }
   if (trato.estado !== 'FINANCIADO') throw errores.estadoInvalido('Este trato no tiene plata en custodia.');
   if (!trato.compradorAddress) throw errores.estadoInvalido('No sabemos a quién devolver.');
 
-  if (params.motivo === 'ACORDADA') {
-    if (!params.actor || params.actor.id !== trato.compradorId) {
-      throw errores.sinPermiso('Solo el comprador puede soltar la devolución antes del plazo.');
-    }
-  } else if (trato.liberaHasta && trato.liberaHasta > new Date()) {
+  if (!plazoDevolucionVencido(trato.liberaHasta)) {
     throw errores.estadoInvalido('Todavía no vence el plazo de entrega.');
-  } else if (params.actor && params.actor.id !== trato.compradorId && params.actor.id !== trato.vendedorId) {
+  }
+  if (params.actor && params.actor.id !== trato.compradorId && params.actor.id !== trato.vendedorId) {
     // El cron llama sin actor. Una persona solo puede empujar la devolucion de
     // un trato del que es parte, aunque el plazo ya haya vencido.
     throw errores.sinPermiso();
@@ -351,14 +405,104 @@ export async function codigoParaComprador(params: { id: string; actor: User }): 
  * expira lo que nadie pago y devuelve lo que paso el plazo de entrega. Esta
  * funcion *es* el sistema de disputas de la v1.
  */
-export async function procesarVencimientos(): Promise<{ expirados: number; devueltos: number; fallidos: number }> {
+export async function procesarVencimientos(): Promise<{
+  depositosConfirmados: number;
+  movimientosRecuperados: number;
+  expirados: number;
+  devueltos: number;
+  fallidos: number;
+}> {
   const ahora = new Date();
 
-  const expirados = await db
-    .update(tratos)
-    .set({ estado: 'EXPIRADO', cerradoEn: ahora, updatedAt: ahora })
-    .where(and(eq(tratos.estado, 'PUBLICADO'), lte(tratos.expiraEn, ahora), isNull(tratos.txDeposito)))
-    .returning({ id: tratos.id });
+  // Recuperación duradera: aunque el comprador cierre la pestaña o el servidor
+  // reinicie, el cron vuelve a buscar depósitos por el memo único del trato.
+  // Los vencidos se revisan primero. Nunca expiramos filas que quedaron fuera
+  // del lote ni aquellas cuya consulta a Horizon falló por un problema de red.
+  const porExpirar = await db
+    .select({ id: tratos.id })
+    .from(tratos)
+    .where(and(eq(tratos.estado, 'PUBLICADO'), lte(tratos.expiraEn, ahora)))
+    .orderBy(tratos.expiraEn)
+    .limit(25);
+
+  const recientes = await db
+    .select({ id: tratos.id })
+    .from(tratos)
+    .where(eq(tratos.estado, 'PUBLICADO'))
+    .orderBy(desc(tratos.createdAt))
+    .limit(25);
+
+  const idsPorExpirar = new Set(porExpirar.map(({ id }) => id));
+  const pendientes = [...new Set([...porExpirar, ...recientes].map(({ id }) => id))];
+
+  let depositosConfirmados = 0;
+  const expirables: string[] = [];
+  for (const id of pendientes) {
+    try {
+      const confirmado = await confirmarDeposito({ id, silencioso: true });
+      if (confirmado.estado !== 'PUBLICADO') depositosConfirmados += 1;
+    } catch (error) {
+      const ausenciaConfirmada =
+        error instanceof ErrorApp && ['DEPOSITO_NO_ENCONTRADO', 'MONTO_INCORRECTO'].includes(error.codigo);
+      if (ausenciaConfirmada && idsPorExpirar.has(id)) {
+        expirables.push(id);
+      } else if (!ausenciaConfirmada) {
+        log.error('no se pudo revisar un depósito pendiente', { tratoId: id, error });
+      }
+    }
+  }
+
+  const ambiguos = await db
+    .select()
+    .from(tratos)
+    .where(inArray(tratos.estado, ['LIBERANDO', 'DEVOLVIENDO']))
+    .limit(25);
+  let movimientosRecuperados = 0;
+  for (const trato of ambiguos) {
+    try {
+      const recuperado =
+        trato.estado === 'LIBERANDO'
+          ? await recuperarMovimiento({
+              trato,
+              desde: 'LIBERANDO',
+              hacia: 'LIBERADO',
+              campoTx: 'txLiberacion',
+              tipoOk: 'LIBERACION_COMPLETADA',
+              tipoFalla: 'LIBERACION_FALLIDA',
+              actor: 'sistema',
+            })
+          : await recuperarMovimiento({
+              trato,
+              desde: 'DEVOLVIENDO',
+              hacia: 'DEVUELTO',
+              campoTx: 'txDevolucion',
+              tipoOk: 'DEVOLUCION_COMPLETADA',
+              tipoFalla: 'DEVOLUCION_FALLIDA',
+              actor: 'sistema',
+            });
+      if (recuperado.estado !== trato.estado) movimientosRecuperados += 1;
+    } catch (error) {
+      if (!(error instanceof ErrorApp) || error.detalle?.estado !== 'DESCONOCIDA') {
+        log.error('no se pudo recuperar un movimiento', { tratoId: trato.id, error });
+      }
+    }
+  }
+
+  const expirados =
+    expirables.length === 0
+      ? []
+      : await db
+          .update(tratos)
+          .set({ estado: 'EXPIRADO', cerradoEn: ahora, updatedAt: ahora })
+          .where(
+            and(
+              inArray(tratos.id, expirables),
+              eq(tratos.estado, 'PUBLICADO'),
+              lte(tratos.expiraEn, ahora),
+              isNull(tratos.txDeposito),
+            ),
+          )
+          .returning({ id: tratos.id });
 
   for (const { id } of expirados) {
     await registrarEvento({ tratoId: id, tipo: 'TRATO_EXPIRADO', actorAddr: 'sistema' });
@@ -382,10 +526,16 @@ export async function procesarVencimientos(): Promise<{ expirados: number; devue
     }
   }
 
-  if (expirados.length > 0 || devueltos > 0 || fallidos > 0) {
-    log.info('vencimientos procesados', { expirados: expirados.length, devueltos, fallidos });
+  if (depositosConfirmados > 0 || movimientosRecuperados > 0 || expirados.length > 0 || devueltos > 0 || fallidos > 0) {
+    log.info('vencimientos procesados', {
+      depositosConfirmados,
+      movimientosRecuperados,
+      expirados: expirados.length,
+      devueltos,
+      fallidos,
+    });
   }
-  return { expirados: expirados.length, devueltos, fallidos };
+  return { depositosConfirmados, movimientosRecuperados, expirados: expirados.length, devueltos, fallidos };
 }
 
 /**
@@ -424,6 +574,20 @@ async function moverPlata(params: {
       monto,
       memo: params.memo,
       alConstruir: async (hash) => {
+        const guardado = await db
+          .update(tratos)
+          .set({ [params.campoTx]: hash, updatedAt: new Date() })
+          .where(
+            and(
+              eq(tratos.id, params.trato.id),
+              eq(tratos.estado, params.desde),
+              isNull(tratos[params.campoTx]),
+            ),
+          )
+          .returning({ id: tratos.id });
+        if (guardado.length === 0) {
+          throw errores.estadoInvalido('Ya existe otra operación monetaria para este trato.');
+        }
         await registrarEvento({
           tratoId: params.trato.id,
           tipo: params.desde === 'LIBERANDO' ? 'LIBERACION_INICIADA' : 'DEVOLUCION_INICIADA',
@@ -432,40 +596,98 @@ async function moverPlata(params: {
       },
     });
 
-    const ahora = new Date();
-    const filas = await db
-      .update(tratos)
-      .set({
-        estado: params.hacia,
-        [params.campoTx]: resultado.hash,
-        cerradoEn: ahora,
-        updatedAt: ahora,
-      })
-      .where(and(eq(tratos.id, params.trato.id), eq(tratos.estado, params.desde)))
-      .returning();
+    return finalizarMovimientoConfirmado(params, resultado.hash);
+  } catch (error) {
+    const actual = await obtenerTrato(params.trato.id);
+    if (actual.estado === params.hacia) return actual;
+    if (actual.estado !== params.desde) throw error;
 
+    const resultado = error instanceof ErrorApp ? error.detalle?.resultado : undefined;
+    if (resultado === 'FALLIDA' || resultado === 'NO_ENVIADA') {
+      await marcarMovimientoFallido({ ...params, trato: actual }, error);
+      throw error;
+    }
+
+    // Un timeout o error de red es ambiguo. Se consulta el hash persistido y,
+    // si Horizon aún no sabe qué ocurrió, el estado queda bloqueado para que
+    // ninguna petición pueda construir una segunda transferencia.
+    if (actual[params.campoTx]) {
+      return recuperarMovimiento({ ...params, trato: actual });
+    }
+
+    await marcarMovimientoFallido({ ...params, trato: actual }, error);
+    throw error;
+  }
+}
+
+type MovimientoParams = {
+  trato: Trato;
+  desde: Extract<EstadoTrato, 'LIBERANDO' | 'DEVOLVIENDO'>;
+  hacia: Extract<EstadoTrato, 'LIBERADO' | 'DEVUELTO'>;
+  campoTx: 'txLiberacion' | 'txDevolucion';
+  tipoOk: 'LIBERACION_COMPLETADA' | 'DEVOLUCION_COMPLETADA';
+  tipoFalla: 'LIBERACION_FALLIDA' | 'DEVOLUCION_FALLIDA';
+  actor: string;
+  ip?: string | null;
+};
+
+async function finalizarMovimientoConfirmado(params: MovimientoParams, hash: string): Promise<Trato> {
+  const ahora = new Date();
+  const filas = await db
+    .update(tratos)
+    .set({ estado: params.hacia, [params.campoTx]: hash, cerradoEn: ahora, updatedAt: ahora })
+    .where(and(eq(tratos.id, params.trato.id), eq(tratos.estado, params.desde), eq(tratos[params.campoTx], hash)))
+    .returning();
+
+  if (filas.length > 0) {
     await registrarEvento({
       tratoId: params.trato.id,
       tipo: params.tipoOk,
-      payload: { hash: resultado.hash, destino: params.destino, monto },
+      payload: { hash },
       actorAddr: params.actor,
       ip: params.ip,
     });
+    return filas[0] as Trato;
+  }
+  return obtenerTrato(params.trato.id);
+}
 
-    return (filas[0] as Trato | undefined) ?? obtenerTrato(params.trato.id);
-  } catch (error) {
-    await db
-      .update(tratos)
-      .set({ estado: 'FINANCIADO', updatedAt: new Date() })
-      .where(and(eq(tratos.id, params.trato.id), eq(tratos.estado, params.desde)));
-
+async function marcarMovimientoFallido(params: MovimientoParams, error: unknown): Promise<Trato> {
+  const hash = params.trato[params.campoTx];
+  const filas = await db
+    .update(tratos)
+    .set({ estado: 'FINANCIADO', [params.campoTx]: null, updatedAt: new Date() })
+    .where(and(eq(tratos.id, params.trato.id), eq(tratos.estado, params.desde)))
+    .returning();
+  if (filas.length > 0) {
     await registrarEvento({
       tratoId: params.trato.id,
       tipo: params.tipoFalla,
-      payload: { error: error instanceof Error ? error.message : 'desconocido' },
+      payload: { hash, error: error instanceof Error ? error.message : 'desconocido' },
       actorAddr: params.actor,
       ip: params.ip,
     });
-    throw error;
+    return filas[0] as Trato;
   }
+  return obtenerTrato(params.trato.id);
+}
+
+export async function recuperarMovimiento(params: MovimientoParams): Promise<Trato> {
+  const hash = params.trato[params.campoTx];
+  if (!hash) {
+    return marcarMovimientoFallido(params, new Error('La operación no llegó a construirse.'));
+  }
+
+  const estado = await consultarTx(hash);
+  const decision = decidirRecuperacion(estado);
+  if (decision === 'ESPERAR') {
+    throw errores.cadena(
+      'La red todavía no confirma si la operación terminó. No se enviará otra transferencia hasta resolverla.',
+      { hash, estado: 'DESCONOCIDA' },
+    );
+  }
+  if (decision === 'REINTENTAR') {
+    return marcarMovimientoFallido(params, new Error('La red confirmó que la operación falló.'));
+  }
+  return finalizarMovimientoConfirmado(params, hash);
 }

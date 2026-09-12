@@ -9,11 +9,11 @@ import { PagarTrato } from '@/components/PagarTrato';
 import { CodigoComprador } from '@/components/CodigoComprador';
 import { Aviso } from '@/components/ui/Aviso';
 import { Boton, Spinner } from '@/components/ui/Boton';
-import { get, post } from '@/lib/cliente/api';
+import { ErrorApi, get, post } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 
-const ESTADOS_VIVOS = ['PUBLICADO', 'LIBERANDO', 'DEVOLVIENDO'];
+const ESTADOS_VIVOS = ['PUBLICADO', 'FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'];
 
 export default function PaginaTrato({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -35,14 +35,24 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
     void cargar();
   }, [cargar, usuario?.id]);
 
-  // Sondeo mientras el trato esta esperando algo de la red. Los webhooks de
-  // Pollar siguen en "upcoming", asi que el estado se sostiene con polling y
-  // cron; si los webhooks se activan, se enchufan encima sin cambiar esto.
+  // En PUBLICADO el sondeo vuelve a consultar Horizon, no solo la base. Esto
+  // recupera pagos que se confirmaron después de cerrar o refrescar la página.
   useEffect(() => {
     if (!trato || !ESTADOS_VIVOS.includes(trato.estado)) return;
-    const t = setInterval(() => void cargar(), 6000);
+    const revisar = async () => {
+      if (trato.estado === 'PUBLICADO' && usuario) {
+        try {
+          setTrato(await post<TratoPublico>(`/api/tratos/${trato.id}/confirmar`, {}));
+          return;
+        } catch (e) {
+          if (!(e instanceof ErrorApi) || e.codigo !== 'DEPOSITO_NO_ENCONTRADO') return;
+        }
+      }
+      await cargar();
+    };
+    const t = setInterval(() => void revisar(), 6000);
     return () => clearInterval(t);
-  }, [trato, cargar]);
+  }, [trato, cargar, usuario]);
 
   if (error) {
     return (
@@ -83,6 +93,7 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
   const esVendedor = trato.rol === 'vendedor';
   const esComprador = trato.rol === 'comprador';
   const red = config?.red ?? 'testnet';
+  const plazoVencido = Boolean(trato.liberaHasta && new Date(trato.liberaHasta).getTime() <= Date.now());
 
   return (
     <>
@@ -131,13 +142,17 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
           </section>
         )}
 
-        {trato.estado === 'FINANCIADO' && esComprador && (
+        {trato.estado === 'FINANCIADO' && esComprador && plazoVencido && (
           <Boton
             variante="fantasma"
             cargando={accion === 'devolver'}
-            onClick={() => void ejecutar(`/api/tratos/${trato.id}/devolver`, 'devolver')}
+            onClick={() => {
+              if (window.confirm('El plazo venció. ¿Confirmas que quieres devolver el pago a tu wallet?')) {
+                void ejecutar(`/api/tratos/${trato.id}/devolver`, 'devolver');
+              }
+            }}
           >
-            No me entregaron: devolver mi plata
+            Plazo vencido: devolver mi plata
           </Boton>
         )}
 
