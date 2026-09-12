@@ -8,7 +8,23 @@ const SENSIBLES = /^(codigo|password|secret|secretKey|authorization|cookie|token
 
 function sanitizar(valor: unknown, profundidad = 0): unknown {
   if (profundidad > 4) return '[...]';
-  if (valor instanceof Error) return { name: valor.name, message: valor.message };
+  if (valor instanceof Error) {
+    const error = valor as Error & {
+      code?: string;
+      detail?: string;
+      hint?: string;
+      position?: string;
+    };
+    return {
+      name: error.name,
+      message: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.detail ? { detail: error.detail } : {}),
+      ...(error.hint ? { hint: error.hint } : {}),
+      ...(error.position ? { position: error.position } : {}),
+      ...(error.cause ? { cause: sanitizar(error.cause, profundidad + 1) } : {}),
+    };
+  }
   if (Array.isArray(valor)) return valor.map((v) => sanitizar(v, profundidad + 1));
   if (valor && typeof valor === 'object') {
     return Object.fromEntries(
