@@ -13,6 +13,8 @@ import { ErrorApi, get, post } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono } from '@/components/Marca';
+import { ReputacionVendedor } from '@/components/ReputacionVendedor';
+import { VerEvidencia } from '@/components/EvidenciaEntrega';
 
 const ESTADOS_VIVOS = ['PUBLICADO', 'FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'];
 
@@ -136,6 +138,10 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
           )}
         </section>
 
+        {/* El historial del vendedor va antes del botón de pagar: es la pregunta
+            que el comprador se hace justo antes de tocarlo. */}
+        {!esVendedor && trato.vendedor && <ReputacionVendedor reputacion={trato.vendedor} />}
+
         {trato.estado === 'PUBLICADO' &&
           (esVendedor ? <CompartirTrato trato={trato} /> : <PagarTrato trato={trato} alActualizar={setTrato} />)}
 
@@ -185,6 +191,8 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
                 : 'La plata volvió al comprador.'}
           </Aviso>
         )}
+
+        <VerEvidencia trato={trato} />
 
         <Comprobantes trato={trato} red={red} />
         </div>

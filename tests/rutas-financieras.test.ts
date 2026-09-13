@@ -8,6 +8,9 @@ const dobles = vi.hoisted(() => ({
   },
   confirmar: vi.fn(),
   devolver: vi.fn(),
+  // La vista pública añade el historial del vendedor; acá se devuelve el trato
+  // tal cual para que la prueba siga midiendo solo la ruta.
+  vista: vi.fn(async (trato: unknown) => trato),
 }));
 
 vi.mock('@/lib/auth', () => ({
@@ -17,6 +20,7 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/tratos/service', () => ({
   confirmarDeposito: dobles.confirmar,
   devolver: dobles.devolver,
+  vistaDeTrato: dobles.vista,
 }));
 
 vi.mock('@/lib/tratos/dto', () => ({

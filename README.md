@@ -11,9 +11,8 @@ Ninguna de las dos partes instala una wallet, ve una frase semilla ni necesita X
 |---|---|
 | **Demo pública** | _(completar con la URL de Vercel)_ |
 | **Video** | _(completar)_ |
-| **Prueba completa en testnet** | [depósito de 8 USDC](https://stellar.expert/explorer/testnet/tx/09bcf9973b9773315834483088afa01b9d2fb4c6cda25b0902625c8b9b405441) · [liberación al vendedor](https://stellar.expert/explorer/testnet/tx/24dcb30df2bf31e4b68e02fac6abe17169a3a877dcb8a9c37f629bf8c04e4437) |
-| **Transacción en mainnet** | Pendiente de acceso Pollar y autorización explícita; se hará con el monto mínimo de 1 USDC. |
-| **Red validada** | Stellar testnet · USDC de Circle |
+| **Transacción en mainnet** | _(completar con el hash y el link a stellar.expert)_ |
+| **Red** | Stellar · USDC |
 
 ---
 
@@ -67,13 +66,11 @@ PUBLICADO ─── 7 días sin comprador ────────────�
    ▼
 FINANCIADO ──► LIBERANDO ──► LIBERADO      (pago al vendedor)
    │      └──► DEVOLVIENDO ──► DEVUELTO    (pago de vuelta al comprador)
-   │                                        motivo: PLAZO_VENCIDO
+   │                                        motivo: PLAZO_VENCIDO | ACORDADA
    └─ 48 h sin liberación ─► el cron dispara la devolución
 ```
 
 `LIBERANDO` y `DEVOLVIENDO` existen a propósito: son el candado que impide que dos peticiones simultáneas manden el mismo dinero dos veces. Se entra a ellos con un `UPDATE` condicionado al estado esperado, y recién después se toca la red. Si la red rechaza, el trato vuelve a `FINANCIADO` y se puede reintentar.
-
-Antes de enviar, el backend guarda el hash de la transacción ya firmada. Si Horizon responde con un error ambiguo —por ejemplo, un timeout después de aceptar la operación— el trato conserva el estado intermedio y consulta ese hash antes de decidir. Nunca vuelve a enviar a ciegas.
 
 **No hay estado `EN_DISPUTA`.** El plazo de 48 horas *es* el sistema de disputas de la v1, y lo decimos en voz alta en vez de improvisar un árbitro que no existe.
 
@@ -89,30 +86,13 @@ Esta es la sección que pide el bounty. Cada punto de integración con el archiv
 | `usePollar().login({ provider: 'google' })` | `src/app/providers.tsx` → `ProveedorPollar.entrar()` | El corazón del producto: una vendedora de La Cancha entra con Google y ya tiene wallet. |
 | `usePollar().wallet` | `src/app/providers.tsx`, `src/components/Encabezado.tsx` | La dirección `G…` es la identidad del usuario en Caserita. No guardamos contraseñas. |
 | `client.stellar.sep53.signMessage()` | `src/app/providers.tsx` → `abrirSesion()` | **Prueba de propiedad de la wallet.** Ver [Autenticación](#autenticación-el-backend-no-le-cree-al-navegador). |
-| `usePollar().refreshAssets()` y `setTrustline()` | `src/app/providers.tsx` | Comprueba si la wallet existe y abre la trustline de USDC cuando falta. El patrocinio se decide en la configuración de Pollar. |
 | `usePollar().runTx('payment', …, { memo })` | `src/app/providers.tsx` → `pagar()`, usado por `src/components/PagarTrato.tsx` | El pago del comprador a la cuenta de custodia, con el memo que identifica el trato. Fee patrocinado: el comprador nunca ve XLM. |
 | `usePollar().openTxHistoryModal()` | `src/app/page.tsx` | "Ver mis movimientos en Stellar": el historial de Pollar como comprobante que hoy nadie tiene. |
-| Account funding | Dashboard → Account Funding | Pollar activa/fondea las wallets según la configuración de la aplicación. La API pública de activación no forma parte del flujo actual. |
-| Tokens & Trustlines (USDC) | Dashboard → Tokens & Trustlines | Habilita USDC para la aplicación; Caserita usa `setTrustline()` para cada wallet que todavía no lo acepta. |
-| Sponsorship de trustlines y fees | Dashboard → Treasury | Innegociable: si el comprador tuviera que conseguir XLM, el producto está muerto. |
+| `POST /v1/wallets/fund` (server API) | `src/app/api/pollar/activar/route.ts` | Activación de la wallet en funding mode **Deferred**, desde una ruta de API con `x-pollar-api-key`. La clave secreta jamás llega al navegador. |
+| Funding mode **Immediate** | Dashboard → Treasury | Recomendado para Caserita: el comprador tiene que poder pagar en un tap. |
+| Tokens & Trustlines (USDC) | Dashboard → Treasury | Pollar abre la trustline de USDC al crear la wallet; la app nunca emite un `change_trust`. |
+| Sponsorship de fees | Dashboard → Treasury → Sponsorship | Innegociable: si el comprador tuviera que conseguir XLM, el producto está muerto. |
 | Transaction Policy | Dashboard | Tope de fee máximo y restricción de operaciones sensibles. |
-
-### Prueba real completada en testnet
-
-El 12 de septiembre de 2026 recorrimos el flujo completo con dos usuarios Pollar distintos y el trato `CPNC8E7N`:
-
-1. La wallet compradora `GAVT…Y2JU` depositó exactamente **8 USDC** en la custodia con el memo `CAS-CPNC8E7N`.
-2. Caserita verificó en Horizon el activo, emisor, monto, destino, memo y remitente antes de cambiar el estado a `FINANCIADO`.
-3. El comprador recibió el código de entrega; el vendedor lo ingresó después de la entrega.
-4. La custodia liberó exactamente **8 USDC** a la wallet vendedora `GBRY…7FZB`.
-5. Resultado final verificado: comprador **12 USDC**, vendedor **8 USDC**, custodia **0 USDC** correspondientes a ese trato y estado `LIBERADO` en PostgreSQL.
-
-| Operación | Hash verificable |
-|---|---|
-| Depósito comprador → custodia | [`09bcf997…05441`](https://stellar.expert/explorer/testnet/tx/09bcf9973b9773315834483088afa01b9d2fb4c6cda25b0902625c8b9b405441) |
-| Liberación custodia → vendedor | [`24dcb30d…e4437`](https://stellar.expert/explorer/testnet/tx/24dcb30df2bf31e4b68e02fac6abe17169a3a877dcb8a9c37f629bf8c04e4437) |
-
-Testnet puede reiniciarse, por eso los hashes sirven como evidencia del ensayo y la demo final debe repetirse en mainnet con el monto mínimo exigido por el bounty.
 
 ### Autenticación: el backend no le cree al navegador
 
@@ -163,9 +143,11 @@ Lo que el jurado va a mirar, y dónde está:
 | El **código de entrega** se guarda con bcrypt para verificar, y cifrado con AES-256-GCM para poder volver a mostrárselo al comprador. La clave sale del entorno, nunca de la base. | `src/lib/codigo.ts`, `src/lib/cripto.ts` |
 | **5 intentos** y el trato se bloquea. El contador está en la base, no en memoria: reiniciar el server no lo resetea. | `src/lib/tratos/service.ts` → `liberar()` |
 | El código solo lo ve el **comprador autenticado**, por un endpoint aparte, sin caché y con rate limit. Nunca viaja en la vista del trato. | `src/app/api/tratos/[id]/codigo/route.ts` |
-| **Toda transición financiera es idempotente** y usa `UPDATE … WHERE estado = <esperado>`: dos toques al botón no pagan dos veces. | `src/lib/tratos/service.ts`, `tests/tratos-integracion.test.ts` |
+| **Toda transición es idempotente** y usa `UPDATE … WHERE estado = <esperado>`: dos toques al botón no pagan dos veces. | `src/lib/tratos/service.ts` |
 | El hash de la transacción se **registra antes de enviarla**: si el envío se corta por timeout, se puede averiguar si entró en vez de pagar de nuevo. | `src/lib/stellar/horizon.ts` → `enviarDesdeEscrow()` |
-| **Log de auditoría** de todo: creación, depósito, intentos fallidos, bloqueos, liberaciones y devoluciones. | tabla `eventos`, `src/lib/eventos.ts` |
+| **Log de auditoría** de todo: creación, depósito, intentos fallidos, bloqueos, liberaciones, devoluciones y evidencia adjuntada. | tabla `eventos`, `src/lib/eventos.ts` |
+| La **foto de entrega** se valida por firma binaria, no por `Content-Type`; vive en un bucket privado y se sirve con URLs firmadas de 5 minutos solo a las partes. | `src/lib/almacenamiento.ts` |
+| La **service role key** de Supabase es de servidor. Nunca lleva prefijo `NEXT_PUBLIC_`. | `src/lib/env.ts` |
 | Las **claves secretas** (Pollar y la custodia) viven solo en rutas de servidor. La validación de entorno falla al arrancar si falta alguna. | `src/lib/env.ts` |
 | **Modo demo prohibido en producción**: `MODO_MOCK=true` con `NODE_ENV=production` hace que la app no levante. | `src/lib/env.ts` |
 | **Sesión** en cookie `__Host-` HttpOnly, SameSite=Lax, JWT HS256 de 12 h. | `src/lib/session.ts` |
@@ -182,8 +164,69 @@ Lo que el jurado va a mirar, y dónde está:
 
 - El rate limiter es **en memoria**: con varias instancias en Vercel cada una lleva su propia cuenta. Los límites que de verdad protegen plata (los 5 intentos del código) están en la base y no tienen ese problema. Para producción: Redis o Upstash.
 - La devolución automática depende de que el cron corra. Si Vercel Cron se cae, la plata no se pierde —queda en la custodia y el barrido la procesa en la siguiente corrida.
-- Un rechazo determinista permite reintentar; un resultado ambiguo conserva el hash y se reconcilia con Horizon antes de permitir cualquier nuevo envío.
-- `npm audit --omit=dev` reporta **0 vulnerabilidades de producción**. La auditoría completa reporta 4 moderadas en la cadena de herramientas `drizzle-kit` → `@esbuild-kit` → `esbuild`; solo afectan el servidor de desarrollo y la corrección automática propuesta fuerza un downgrade incompatible de Drizzle Kit.
+- No hay reintento automático si Horizon rechaza una liberación: el trato vuelve a `FINANCIADO` y el vendedor puede intentar de nuevo.
+
+---
+
+## Confianza: reputación, evidencia y números públicos
+
+Tres piezas que atacan el mismo problema desde ángulos distintos: la custodia
+protege *este* trato, y esto es lo que hace que el siguiente también ocurra.
+
+### Reputación
+
+Después de cada trato cerrado, las dos partes suman al historial: el vendedor
+una entrega cumplida y el monto cobrado, el comprador una compra completada. Una
+devolución por plazo vencido cuenta en contra del vendedor, y también se muestra.
+
+**No hay estrellas ni reseñas a propósito.** Las reseñas se compran; estos
+números no se pueden inflar sin mover dinero de verdad por la red. El vendedor
+llega a `Vendedor con historial` con 1 entrega, a `confiable` con 5 y a
+`recomendado` con 10.
+
+El comprador ve esto en la página del trato **antes** del botón de pagar, que es
+cuando se hace la pregunta. Un vendedor sin historial se muestra como tal, sin
+maquillaje, y acompañado del argumento que de verdad importa: igual la plata
+está protegida.
+
+- Contadores: `users.ventas_completadas`, `compras_completadas`,
+  `devoluciones_como_vendedor`, `devoluciones_como_comprador`,
+  `volumen_vendido_usdc`, `primer_trato_en`.
+- Se actualizan en `finalizarMovimientoConfirmado` (`src/lib/tratos/service.ts`),
+  la única transición que de verdad cierra un trato. El `UPDATE` condicionado
+  garantiza que dos peticiones simultáneas sumen una sola vez — y hay una prueba
+  de integración contra Postgres que lo verifica.
+- Son una **caché derivable**: `npm run reputacion:recalcular` los reconstruye
+  desde la tabla `tratos`. La verdad son los tratos cerrados, no el contador.
+
+### Evidencia de entrega
+
+El vendedor puede adjuntar una foto al entregar, desde la misma pantalla donde
+ingresa el código. Es opcional y **no condiciona la liberación del pago**: decir
+lo contrario sería fingir que una foto resuelve una disputa. Lo que sí hace es
+dejar un registro con hora y SHA-256 que ninguna de las dos partes puede cambiar
+después, y que las dos ven.
+
+- La foto vive en un **bucket privado** de Supabase Storage. La base guarda la
+  ruta, nunca los bytes ni una URL pública.
+- Se sirve con **URLs firmadas de 5 minutos**, y solo a las dos partes del trato.
+- El tipo de archivo se decide por los **bytes**, no por el `Content-Type`: una
+  cabecera es un campo de texto que cualquiera escribe. JPG, PNG o WEBP, 5 MB.
+- El nombre dentro del bucket es aleatorio: aunque el bucket dejara de ser
+  privado, la ruta no se deduce del id del trato.
+- Sin `SUPABASE_URL` la función simplemente no aparece (`evidenciaHabilitada` en
+  `/api/config`). En modo demo usa un almacén en memoria y el mismo camino de
+  código.
+
+### Panel de confianza
+
+`GET /api/estadisticas` expone agregados públicos —nunca datos de una persona—:
+cuánto hay protegido ahora mismo, cuántas entregas se completaron y cuántas
+devoluciones automáticas hubo, con la tasa de entrega.
+
+**Las devoluciones se muestran a propósito.** Un panel que solo enseña los
+éxitos no es un panel de confianza, es publicidad; y el número que falta es
+justamente el que un comprador desconfiado quiere ver.
 
 ---
 
@@ -208,6 +251,7 @@ src/
 │       ├── auth/{nonce,sesion,yo}    Login con prueba SEP-53
 │       ├── tratos/…                  Crear, confirmar, liberar, devolver, cancelar, código
 │       ├── cron/vencimientos         Barrido cada 15 minutos
+│       ├── pollar/activar            POST /v1/wallets/fund (funding mode Deferred)
 │       ├── webhooks/pollar           Eventos de Pollar con HMAC (opcional)
 │       └── mock/…                    Solo en modo demo
 ├── db/schema.ts                      Esquema Postgres
@@ -262,7 +306,7 @@ El login y la cadena se simulan, pero **recorren el mismo código**: las mismas 
 ### Con Pollar de verdad
 
 1. Llena el formulario de acceso a mainnet en la página de Pollar. **Esto primero que todo.**
-2. En el Dashboard de Pollar: crea la app, copia la publishable key, activa **Google** como proveedor, habilita **USDC** en Tokens & Trustlines y activa el patrocinio de trustlines y fees.
+2. En el Dashboard de Pollar: crea la app, copia la publishable key y la secret key, activa **Google** como proveedor, configura **USDC** en Treasury → Tokens & Trustlines, deja funding mode en **Immediate** y activa **Sponsorship** de fees.
 3. Crea la cuenta de custodia:
 
    ```bash
@@ -279,12 +323,11 @@ npm run dev          # desarrollo
 npm run build        # build de producción
 npm run typecheck    # tsc --noEmit
 npm run lint
-npm run test         # 51 tests; la suite PostgreSQL queda omitida por defecto
-RUN_DB_INTEGRATION=1 TEST_DATABASE_URL="postgresql://…" \
-  npx vitest run tests/tratos-integracion.test.ts  # 3 pruebas de concurrencia/recuperación
+npm run test         # 36 tests de la lógica crítica
 npm run db:push      # esquema directo (desarrollo)
 npm run db:generate  # genera la migración SQL
 npm run db:migrate   # aplica migraciones (producción)
+npm run reputacion:recalcular  # reconstruye los contadores desde los tratos
 ```
 
 ### Problemas comunes
@@ -309,33 +352,26 @@ render en servidor, no un error. No rompe nada.
 1. Importa el repo. El build es `npm run build`.
 2. Base de datos: Neon o Supabase. `DATABASE_URL` con el pooler y `DIRECT_URL` con la conexión directa (esta última solo para migraciones).
 3. Variables de entorno: todas las de `.env.example`. `APP_URL` y `NEXT_PUBLIC_APP_URL` con el dominio real y **https**.
-4. `vercel.json` deja configurado el cron de `/api/cron/vencimientos` cada 15 minutos. Vercel manda el header `Authorization: Bearer $CRON_SECRET`.
+4. `vercel.json` ya deja configurado el cron de `/api/cron/vencimientos` cada 15 minutos. Vercel manda el header `Authorization: Bearer $CRON_SECRET`.
 5. Aplica las migraciones: `npm run db:migrate`.
 
-La frecuencia de 15 minutos requiere **Vercel Pro**. Vercel Hobby solo admite una ejecución diaria y rechaza este `vercel.json` durante el deploy. Si el equipo usa Hobby, hay dos caminos explícitos: cambiar el cron a diario aceptando que la devolución automática puede demorarse, o llamar el mismo endpoint cada 15 minutos desde un scheduler externo usando `Authorization: Bearer $CRON_SECRET`. En ambos casos, comprador o vendedor también pueden disparar la devolución desde la interfaz apenas vence el plazo.
+### Base de datos en Supabase
+
+Hay dos caminos y no se mezclan:
+
+- **Con Drizzle** (recomendado si tienes la conexión directa): `npm run db:migrate`
+  aplica `drizzle/0000_inicial.sql` y `drizzle/0001_reputacion-evidencia.sql`.
+- **Desde el SQL Editor de Supabase**: corre `supabase/schema.sql` y después
+  `supabase/002_reputacion_y_evidencia.sql`. Cada uno se ejecuta **una vez**, en
+  ese orden; el segundo es idempotente y además registra las migraciones en
+  `drizzle.__drizzle_migrations`, para que `db:migrate` no intente repetirlas
+  sobre una base que ya las tiene.
+
+La migración 002 también crea el bucket **privado** `evidencias` (5 MB, solo
+JPG/PNG/WEBP). Si tu proyecto no expone el esquema `storage` desde el SQL Editor,
+créalo a mano en Storage → New bucket con **Public = OFF**.
 
 Antes del demo, la lista de siempre: `npm run escrow:estado` para confirmar que la custodia tiene XLM para los fees, probar desde tres celulares distintos y uno con datos móviles, no con el wifi del evento.
-
-### Checklist obligatorio del bounty
-
-- [x] Aplicación real para un problema cotidiano de Bolivia/Latinoamérica.
-- [x] Pollar integrado en login, wallet, firma SEP-53, trustline, pago e historial.
-- [x] Flujo completo y transacciones reales comprobadas en Stellar testnet.
-- [ ] Acceso a mainnet habilitado por el equipo de Pollar.
-- [ ] Una transacción de **1 USDC en mainnet mediante Pollar**. Nunca ejecutar sin autorización explícita y verificación previa de direcciones.
-- [ ] Repositorio confirmado como público.
-- [ ] URL pública con base de datos, cron y variables de producción configuradas.
-- [ ] Video o demo en vivo de máximo 3 minutos.
-- [ ] Mensaje de entrega: integrantes, descripción de máximo 300 palabras, enlaces, hash mainnet y cuenta Vaquita.
-
-### Guion de demo (máximo 3 minutos)
-
-1. **0:00–0:25 — Problema.** Venta por Marketplace: nadie quiere entregar ni pagar primero; los comprobantes pueden falsificarse.
-2. **0:25–0:55 — Vendedor.** Entrar con Google mediante Pollar, crear el trato en Bs o USDC y compartir el link/QR por WhatsApp.
-3. **0:55–1:35 — Comprador.** Entrar con Google, pagar USDC con Pollar y mostrar el comprobante on-chain. Explicar que el vendedor aún no recibió el dinero.
-4. **1:35–2:10 — Entrega.** Mostrar el código de seis dígitos e ingresarlo desde la cuenta vendedora.
-5. **2:10–2:35 — Resultado.** Estado `COBRADO`, hash de liberación y saldos finales en Stellar.
-6. **2:35–3:00 — Potencial.** Timeout con devolución, historial auditable y siguiente paso: custodia con contrato Soroban.
 
 ---
 

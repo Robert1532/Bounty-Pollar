@@ -32,6 +32,43 @@ export interface TratoPublico {
   financiadoEn: string | null;
   creadoEn: string;
   rol: 'vendedor' | 'comprador' | 'visitante';
+  vendedor: Reputacion | null;
+  tieneEvidencia: boolean;
+  evidenciaSubidaEn: string | null;
+  evidenciaHash: string | null;
+}
+
+export type NivelVendedor = 'nuevo' | 'conocido' | 'confiable' | 'recomendado';
+
+/** Hechos, no estrellas: todo lo de acá ocurrió y quedó en la red. */
+export interface Reputacion {
+  ventasCompletadas: number;
+  comprasCompletadas: number;
+  devolucionesComoVendedor: number;
+  devolucionesComoComprador: number;
+  volumenVendidoUsdc: string;
+  primerTratoEn: string | null;
+  nivel: NivelVendedor;
+  tasaEntrega: number | null;
+}
+
+/** Agregados públicos del panel de confianza. Nunca datos de una persona. */
+export interface Estadisticas {
+  protegidoAhoraUsdc: string;
+  tratosEnCustodia: number;
+  tratosCompletados: number;
+  volumenCompletadoUsdc: string;
+  tratosDevueltos: number;
+  tratosTotales: number;
+  personas: number;
+  tasaEntrega: number | null;
+}
+
+export interface Evidencia {
+  url: string;
+  hash: string;
+  subidaEn: string;
+  tipo: string;
 }
 
 export interface ConfigPublica {
@@ -43,6 +80,7 @@ export interface ConfigPublica {
   horasParaEntregar: number;
   tipoCambioBs: number;
   modoMock: boolean;
+  evidenciaHabilitada: boolean;
 }
 
 export interface UsuarioSesion {

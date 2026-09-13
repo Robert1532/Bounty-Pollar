@@ -12,6 +12,7 @@ import { get } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono, Isotipo, type NombreIcono } from '@/components/Marca';
 import { DialogoConfirmacion } from '@/components/ui/DialogoConfirmacion';
+import { PanelConfianza } from '@/components/PanelConfianza';
 
 type Pestana = 'vendo' | 'compro';
 
@@ -95,6 +96,8 @@ export default function Inicio() {
             ))}
           </div>
         )}
+
+        <PanelConfianza />
         </div>
       </main>
 
@@ -197,6 +200,10 @@ function Presentacion({
               <div className="mt-6 rounded-2xl bg-papel-2 px-4 py-3 text-center text-xs font-bold text-tinta-2">
                 Lo bueno de tu comunidad, ahora en un solo lugar.
               </div>
+            </div>
+
+            <div className="mt-4">
+              <PanelConfianza />
             </div>
           </section>
         </div>

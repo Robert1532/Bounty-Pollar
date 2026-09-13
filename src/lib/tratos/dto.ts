@@ -1,6 +1,7 @@
 import type { Trato, User } from '@/db';
 import { normalizarMonto } from '../money';
 import { MAX_INTENTOS } from '../codigo';
+import { reputacionDe, type Reputacion } from './reputacion';
 
 export type RolEnTrato = 'vendedor' | 'comprador' | 'visitante';
 
@@ -27,6 +28,14 @@ export interface TratoPublico {
   financiadoEn: string | null;
   creadoEn: string;
   rol: RolEnTrato;
+
+  /** Historial del vendedor. Es lo que el comprador mira antes de pagar. */
+  vendedor: Reputacion | null;
+
+  /** Evidencia de entrega. La foto nunca viaja acá: solo por su propia ruta. */
+  tieneEvidencia: boolean;
+  evidenciaSubidaEn: string | null;
+  evidenciaHash: string | null;
 }
 
 /**
@@ -34,7 +43,7 @@ export interface TratoPublico {
  * aparecen en ninguna vista: el codigo viaja solo por su propio endpoint, y
  * solo al comprador.
  */
-export function aTratoPublico(trato: Trato, usuario?: User | null): TratoPublico {
+export function aTratoPublico(trato: Trato, usuario?: User | null, vendedor?: User | null): TratoPublico {
   return {
     id: trato.id,
     titulo: trato.titulo,
@@ -58,6 +67,10 @@ export function aTratoPublico(trato: Trato, usuario?: User | null): TratoPublico
     financiadoEn: trato.financiadoEn?.toISOString() ?? null,
     creadoEn: trato.createdAt.toISOString(),
     rol: rolDe(trato, usuario),
+    vendedor: vendedor ? reputacionDe(vendedor) : null,
+    tieneEvidencia: Boolean(trato.evidenciaRuta),
+    evidenciaSubidaEn: trato.evidenciaSubidaEn?.toISOString() ?? null,
+    evidenciaHash: trato.evidenciaHash,
   };
 }
 

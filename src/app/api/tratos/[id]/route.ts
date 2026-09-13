@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { usuarioActual } from '@/lib/auth';
 import { manejarError, ok } from '@/lib/http';
 import { idTrato } from '@/lib/validaciones';
-import { obtenerTrato } from '@/lib/tratos/service';
-import { aTratoPublico } from '@/lib/tratos/dto';
+import { obtenerTrato, vistaDeTrato } from '@/lib/tratos/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +16,7 @@ export async function GET(
     const { id } = await ctx.params;
     const trato = await obtenerTrato(idTrato.parse(id));
     const usuario = await usuarioActual();
-    return ok(aTratoPublico(trato, usuario));
+    return ok(await vistaDeTrato(trato, usuario));
   } catch (error) {
     return manejarError(error);
   }

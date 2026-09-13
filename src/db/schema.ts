@@ -45,6 +45,7 @@ export const tipoEvento = pgEnum('tipo_evento', [
   'TRATO_CANCELADO',
   'TRATO_EXPIRADO',
   'WEBHOOK_RECIBIDO',
+  'EVIDENCIA_ADJUNTADA',
 ]);
 
 export const motivoDevolucion = pgEnum('motivo_devolucion', ['PLAZO_VENCIDO', 'ACORDADA']);
@@ -60,6 +61,24 @@ export const users = pgTable('users', {
   pollarUserId: varchar('pollar_user_id', { length: 64 }),
   nombre: varchar('nombre', { length: 80 }),
   telefono: varchar('telefono', { length: 20 }),
+
+  /**
+   * Reputación. No son estrellas ni reseñas: son hechos que ya ocurrieron
+   * on-chain y que esta app puede demostrar. Se guardan como contadores en vez
+   * de calcularse con un COUNT en cada lectura porque la página pública del
+   * trato los muestra antes de que el comprador pague. La fuente de verdad
+   * sigue siendo la tabla `tratos`: `recalcularReputacion()` los reconstruye
+   * desde cero cuando haga falta.
+   */
+  ventasCompletadas: integer('ventas_completadas').notNull().default(0),
+  comprasCompletadas: integer('compras_completadas').notNull().default(0),
+  devolucionesComoVendedor: integer('devoluciones_como_vendedor').notNull().default(0),
+  devolucionesComoComprador: integer('devoluciones_como_comprador').notNull().default(0),
+  /** USDC efectivamente cobrado como vendedor en tratos liberados. */
+  volumenVendidoUsdc: numeric('volumen_vendido_usdc', { precision: 20, scale: 7 }).notNull().default('0'),
+  /** Cuándo cerró su primer trato: "vende acá desde…" pesa más que un número. */
+  primerTratoEn: timestamp('primer_trato_en', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -109,6 +128,23 @@ export const tratos = pgTable(
     txDevolucion: varchar('tx_devolucion', { length: 64 }).unique(),
 
     motivoDevolucion: motivoDevolucion('motivo_devolucion'),
+
+    /**
+     * Evidencia de entrega: una foto opcional que el vendedor adjunta al
+     * entregar. No es prueba legal y no condiciona la liberación — fingir que
+     * una foto resuelve una disputa sería mentir. Lo que sí hace es dejar un
+     * registro con hora y hash que ninguna de las dos partes puede cambiar
+     * después.
+     *
+     * La foto vive en un bucket privado de Supabase Storage: la base guarda la
+     * ruta, nunca los bytes ni una URL pública.
+     */
+    evidenciaRuta: varchar('evidencia_ruta', { length: 200 }),
+    evidenciaTipo: varchar('evidencia_tipo', { length: 40 }),
+    evidenciaBytes: integer('evidencia_bytes'),
+    /** SHA-256 del archivo: permite demostrar que la foto no se cambió después. */
+    evidenciaHash: varchar('evidencia_hash', { length: 64 }),
+    evidenciaSubidaEn: timestamp('evidencia_subida_en', { withTimezone: true }),
 
     expiraEn: timestamp('expira_en', { withTimezone: true }).notNull(),
     financiadoEn: timestamp('financiado_en', { withTimezone: true }),

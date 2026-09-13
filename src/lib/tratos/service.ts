@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNull, lte, sql as sqlRaw } from 'drizzle-orm';
-import { db, tratos, type EstadoTrato, type Trato, type User } from '@/db';
+import { and, count, desc, eq, inArray, isNull, lte, sum, sql as sqlRaw } from 'drizzle-orm';
+import { db, tratos, users, type EstadoTrato, type Trato, type User } from '@/db';
 import { serverEnv } from '../env';
 import { ErrorApp, errores } from '../errors';
 import { log } from '../logger';
@@ -11,6 +11,14 @@ import { nuevoIdTrato } from '../ids';
 import { aStroops, bsAUsdc, normalizarMonto } from '../money';
 import { buscarDeposito, consultarTx, direccionEscrow, enviarDesdeEscrow } from '../stellar';
 import type { CrearTratoInput } from '../validaciones';
+import { aTratoPublico, type TratoPublico } from './dto';
+import { registrarResultado } from './reputacion';
+import {
+  almacenamientoHabilitado,
+  borrarEvidencia,
+  guardarEvidencia,
+  urlDeEvidencia,
+} from '../almacenamiento';
 import { tienePlataRetenida } from './estado';
 import { decidirRecuperacion, plazoDevolucionVencido } from './politicas';
 
@@ -97,6 +105,16 @@ export async function obtenerTrato(id: string): Promise<Trato> {
   const [trato] = await db.select().from(tratos).where(eq(tratos.id, id)).limit(1);
   if (!trato) throw errores.noEncontrado();
   return trato;
+}
+
+/**
+ * La vista pública de un trato con el historial del vendedor incluido. Todas
+ * las rutas devuelven esto para que la pantalla nunca pierda la reputación al
+ * refrescar el estado después de una acción.
+ */
+export async function vistaDeTrato(trato: Trato, usuario?: User | null): Promise<TratoPublico> {
+  const [vendedor] = await db.select().from(users).where(eq(users.id, trato.vendedorId)).limit(1);
+  return aTratoPublico(trato, usuario, vendedor ?? null);
 }
 
 export async function listarTratosDe(userId: string): Promise<{ vendo: Trato[]; compro: Trato[] }> {
@@ -539,6 +557,138 @@ export async function procesarVencimientos(): Promise<{
 }
 
 /**
+ * Evidencia de entrega: una foto opcional que el vendedor adjunta al entregar.
+ *
+ * Es deliberadamente opcional y no condiciona la liberación. Fingir que una
+ * foto resuelve una disputa sería mentir; lo que sí hace es dejar un registro
+ * con hora y hash que ninguna de las dos partes puede cambiar después, y que
+ * las dos pueden ver.
+ */
+export async function adjuntarEvidencia(params: {
+  id: string;
+  datos: Uint8Array;
+  actor: User;
+  ip?: string | null;
+}): Promise<Trato> {
+  if (!almacenamientoHabilitado()) {
+    throw errores.estadoInvalido('Este despliegue no tiene configurado el guardado de fotos.');
+  }
+
+  const trato = await obtenerTrato(params.id);
+  if (trato.vendedorId !== params.actor.id) {
+    throw errores.sinPermiso('Solo el vendedor adjunta la evidencia de entrega.');
+  }
+  if (trato.estado !== 'FINANCIADO') {
+    throw errores.estadoInvalido('La foto se adjunta mientras la plata está en custodia.');
+  }
+
+  const archivo = await guardarEvidencia({ tratoId: trato.id, datos: params.datos });
+  const anterior = trato.evidenciaRuta;
+  const ahora = new Date();
+
+  const filas = await db
+    .update(tratos)
+    .set({
+      evidenciaRuta: archivo.ruta,
+      evidenciaTipo: archivo.tipo,
+      evidenciaBytes: archivo.bytes,
+      evidenciaHash: archivo.hash,
+      evidenciaSubidaEn: ahora,
+      updatedAt: ahora,
+    })
+    .where(and(eq(tratos.id, trato.id), eq(tratos.estado, 'FINANCIADO')))
+    .returning();
+
+  if (filas.length === 0) {
+    await borrarEvidencia(archivo.ruta);
+    throw errores.estadoInvalido('El trato cambió de estado mientras subías la foto.');
+  }
+
+  // Reemplazar deja huérfano el archivo anterior; se borra para no acumular.
+  if (anterior && anterior !== archivo.ruta) await borrarEvidencia(anterior);
+
+  await registrarEvento({
+    tratoId: trato.id,
+    tipo: 'EVIDENCIA_ADJUNTADA',
+    payload: { hash: archivo.hash, bytes: archivo.bytes, tipo: archivo.tipo },
+    actorAddr: params.actor.walletAddress,
+    ip: params.ip,
+  });
+
+  return filas[0] as Trato;
+}
+
+/** La foto, solo para las dos partes del trato y con una URL que caduca. */
+export async function evidenciaDe(params: { id: string; actor: User }): Promise<{
+  url: string;
+  hash: string;
+  subidaEn: string;
+  tipo: string;
+} | null> {
+  const trato = await obtenerTrato(params.id);
+  if (trato.vendedorId !== params.actor.id && trato.compradorId !== params.actor.id) {
+    throw errores.sinPermiso('Esta foto es de las partes del trato.');
+  }
+  if (!trato.evidenciaRuta || !trato.evidenciaSubidaEn) return null;
+
+  return {
+    url: await urlDeEvidencia({ tratoId: trato.id, ruta: trato.evidenciaRuta }),
+    hash: trato.evidenciaHash ?? '',
+    subidaEn: trato.evidenciaSubidaEn.toISOString(),
+    tipo: trato.evidenciaTipo ?? 'image/jpeg',
+  };
+}
+
+/**
+ * Estadísticas públicas de confianza.
+ *
+ * Son agregados, nunca datos de una persona: cuánto hay protegido ahora mismo,
+ * cuántos tratos se completaron y cuántos se devolvieron. Un comprador que
+ * llega por un link de WhatsApp no conoce esta app; estos números son lo
+ * primero que le dicen si vale la pena seguir. Los números chicos también se
+ * muestran: esconderlos sería el primer paso para inventarlos.
+ */
+export async function estadisticasPublicas(): Promise<{
+  protegidoAhoraUsdc: string;
+  tratosEnCustodia: number;
+  tratosCompletados: number;
+  volumenCompletadoUsdc: string;
+  tratosDevueltos: number;
+  tratosTotales: number;
+  personas: number;
+  tasaEntrega: number | null;
+}> {
+  const [custodia, completados, devueltos, totales, personas] = await Promise.all([
+    db
+      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
+      .from(tratos)
+      .where(inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'])),
+    db
+      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
+      .from(tratos)
+      .where(eq(tratos.estado, 'LIBERADO')),
+    db.select({ cantidad: count() }).from(tratos).where(eq(tratos.estado, 'DEVUELTO')),
+    db.select({ cantidad: count() }).from(tratos),
+    db.select({ cantidad: count() }).from(users),
+  ]);
+
+  const completadosN = completados[0]?.cantidad ?? 0;
+  const devueltosN = devueltos[0]?.cantidad ?? 0;
+  const cerrados = completadosN + devueltosN;
+
+  return {
+    protegidoAhoraUsdc: normalizarMonto(custodia[0]?.monto ?? '0'),
+    tratosEnCustodia: custodia[0]?.cantidad ?? 0,
+    tratosCompletados: completadosN,
+    volumenCompletadoUsdc: normalizarMonto(completados[0]?.monto ?? '0'),
+    tratosDevueltos: devueltosN,
+    tratosTotales: totales[0]?.cantidad ?? 0,
+    personas: personas[0]?.cantidad ?? 0,
+    tasaEntrega: cerrados === 0 ? null : Math.round((completadosN / cerrados) * 100),
+  };
+}
+
+/**
  * El unico lugar del sistema que manda dinero hacia afuera.
  *
  * Registra el hash *antes* de enviar: si el envio se corta por timeout, el hash
@@ -640,6 +790,7 @@ async function finalizarMovimientoConfirmado(params: MovimientoParams, hash: str
     .returning();
 
   if (filas.length > 0) {
+    const cerrado = filas[0] as Trato;
     await registrarEvento({
       tratoId: params.trato.id,
       tipo: params.tipoOk,
@@ -647,7 +798,10 @@ async function finalizarMovimientoConfirmado(params: MovimientoParams, hash: str
       actorAddr: params.actor,
       ip: params.ip,
     });
-    return filas[0] as Trato;
+    // Acá y en ningún otro lado: es la única transición que de verdad cierra el
+    // trato, y el UPDATE condicionado garantiza que solo una petición llega.
+    await registrarResultado({ trato: cerrado, resultado: params.hacia });
+    return cerrado;
   }
   return obtenerTrato(params.trato.id);
 }

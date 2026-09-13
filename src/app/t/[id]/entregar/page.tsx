@@ -10,6 +10,7 @@ import { get, post } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono } from '@/components/Marca';
+import { SubirEvidencia } from '@/components/EvidenciaEntrega';
 
 /**
  * La pantalla de la entrega. El vendedor ingresa los 6 digitos que le muestra
@@ -19,7 +20,7 @@ import { Icono } from '@/components/Marca';
 export default function Entregar({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { usuario, cargando } = useSesion();
+  const { usuario, cargando, config } = useSesion();
 
   const [trato, setTrato] = useState<TratoPublico | null>(null);
   const [digitos, setDigitos] = useState<string[]>(Array(6).fill(''));
@@ -114,6 +115,8 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
             entregarle {trato.titulo}.
           </p>
         </div>
+
+        {config?.evidenciaHabilitada && <SubirEvidencia trato={trato} alSubir={setTrato} />}
 
         <form onSubmit={enviar} className="tarjeta space-y-5 p-5 sm:p-6">
           <p className="text-center text-sm font-extrabold">Código del comprador</p>

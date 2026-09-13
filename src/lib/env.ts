@@ -59,6 +59,15 @@ const serverSchema = z.object({
   TIPO_CAMBIO_BS: z.coerce.number().positive().default(6.96),
 
   /**
+   * Supabase Storage para la evidencia de entrega. Opcional: sin estas dos la
+   * app funciona igual y la foto simplemente no se ofrece. La service role key
+   * es de servidor — nunca lleva el prefijo NEXT_PUBLIC_.
+   */
+  SUPABASE_URL: z.url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(20).optional(),
+  SUPABASE_BUCKET_EVIDENCIAS: z.string().min(1).default('evidencias'),
+
+  /**
    * Modo demo: simula la cadena y el login para poder recorrer el flujo
    * completo sin claves. Jamas se habilita en produccion.
    */

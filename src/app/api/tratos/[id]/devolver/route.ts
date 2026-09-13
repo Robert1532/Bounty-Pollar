@@ -3,8 +3,7 @@ import { requerirUsuario } from '@/lib/auth';
 import { leerJson, manejarError, ok, verificarOrigen } from '@/lib/http';
 import { ipDe } from '@/lib/rate-limit';
 import { devolverSchema, idTrato } from '@/lib/validaciones';
-import { devolver } from '@/lib/tratos/service';
-import { aTratoPublico } from '@/lib/tratos/dto';
+import { devolver, vistaDeTrato } from '@/lib/tratos/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +29,7 @@ export async function POST(
       actor: usuario,
       ip: ipDe(req),
     });
-    return ok(aTratoPublico(trato, usuario));
+    return ok(await vistaDeTrato(trato, usuario));
   } catch (error) {
     return manejarError(error);
   }

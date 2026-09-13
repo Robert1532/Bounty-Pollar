@@ -4,8 +4,7 @@ import { leerJson, manejarError, ok, verificarOrigen } from '@/lib/http';
 import { ipDe, limitar } from '@/lib/rate-limit';
 import { ErrorApp } from '@/lib/errors';
 import { idTrato, liberarSchema } from '@/lib/validaciones';
-import { liberar } from '@/lib/tratos/service';
-import { aTratoPublico } from '@/lib/tratos/dto';
+import { liberar, vistaDeTrato } from '@/lib/tratos/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +32,7 @@ export async function POST(
 
     const { codigo } = await leerJson(req, liberarSchema);
     const trato = await liberar({ id: tratoId, codigo, actor: usuario, ip });
-    return ok(aTratoPublico(trato, usuario));
+    return ok(await vistaDeTrato(trato, usuario));
   } catch (error) {
     return manejarError(error);
   }
