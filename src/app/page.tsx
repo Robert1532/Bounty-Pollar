@@ -11,11 +11,12 @@ import { useSesion } from '@/lib/cliente/sesion';
 import { get } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono, Isotipo, type NombreIcono } from '@/components/Marca';
+import { DialogoConfirmacion } from '@/components/ui/DialogoConfirmacion';
 
 type Pestana = 'vendo' | 'compro';
 
 export default function Inicio() {
-  const { usuario, cargando, entrar, ocupado, error, abrirHistorial } = useSesion();
+  const { usuario, cargando, entrar, ocupado, error } = useSesion();
   const [tratos, setTratos] = useState<{ vendo: TratoPublico[]; compro: TratoPublico[] } | null>(null);
   const [pestana, setPestana] = useState<Pestana>('vendo');
 
@@ -74,16 +75,6 @@ export default function Inicio() {
           ))}
         </div>
 
-        {abrirHistorial && (
-          <button
-            onClick={abrirHistorial}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-verde/15 bg-superficie py-3 text-sm font-bold text-verde-oscuro shadow-sm transition hover:bg-verde-claro/40"
-          >
-            <Icono nombre="wallet" className="size-4" />
-            Ver mis movimientos en Stellar
-          </button>
-        )}
-
         {!tratos ? (
           <div className="grid place-items-center py-16">
             <Spinner />
@@ -127,6 +118,8 @@ function Presentacion({
   ocupado: boolean;
   error: string | null;
 }) {
+  const [confirmandoIngreso, setConfirmandoIngreso] = useState(false);
+
   return (
     <>
       <Encabezado />
@@ -149,8 +142,8 @@ function Presentacion({
             {error && <Aviso tono="error">{error}</Aviso>}
 
             <div className="max-w-md space-y-3">
-              <Boton onClick={() => void entrar()} cargando={ocupado}>
-                Entrar con Google <Icono nombre="flecha" className="size-5" />
+              <Boton onClick={() => setConfirmandoIngreso(true)} cargando={ocupado}>
+                Iniciar sesión con Google <Icono nombre="flecha" className="size-5" />
               </Boton>
               <p className="flex items-center justify-center gap-1.5 text-center text-xs text-tinta-3">
                 <Icono nombre="escudo" className="size-3.5" /> Sin instalar wallets ni guardar frases semilla
@@ -208,6 +201,15 @@ function Presentacion({
           </section>
         </div>
       </main>
+      <DialogoConfirmacion
+        abierto={confirmandoIngreso}
+        titulo="Iniciar sesión con Google"
+        detalle={<><p>Caserita usará tu cuenta para identificarte y proteger tus tratos.</p><p className="mt-2 font-semibold text-tinta">¿Es tu cuenta y es un dispositivo de confianza?</p></>}
+        confirmar="Continuar"
+        cargando={ocupado}
+        alCerrar={() => setConfirmandoIngreso(false)}
+        alConfirmar={() => { setConfirmandoIngreso(false); void entrar(); }}
+      />
     </>
   );
 }

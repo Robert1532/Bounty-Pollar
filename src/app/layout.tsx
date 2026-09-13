@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import '@pollar/react/styles.css';
 import './globals.css';
 import { Proveedores } from './providers';
 

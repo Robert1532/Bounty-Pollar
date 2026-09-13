@@ -7,6 +7,7 @@ import { useSesion } from '@/lib/cliente/sesion';
 import { ErrorApi, post } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono, type NombreIcono } from './Marca';
+import { DialogoConfirmacion } from './ui/DialogoConfirmacion';
 
 /**
  * El pago del comprador.
@@ -20,6 +21,7 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
   const { usuario, entrar, pagar, ocupado, modoMock } = useSesion();
   const [paso, setPaso] = useState<'listo' | 'pagando' | 'confirmando'>('listo');
   const [error, setError] = useState<string | null>(null);
+  const [confirmandoIngreso, setConfirmandoIngreso] = useState(false);
 
   const esVendedor = trato.rol === 'vendedor';
 
@@ -93,8 +95,8 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
       {error && <Aviso tono="error">{error}</Aviso>}
 
       {!usuario ? (
-        <Boton onClick={() => void entrar()} cargando={ocupado}>
-          Entrar con Google para pagar
+        <Boton onClick={() => setConfirmandoIngreso(true)} cargando={ocupado}>
+          Iniciar sesión con Google para pagar
         </Boton>
       ) : (
         <Boton onClick={() => void ejecutar()} cargando={paso !== 'listo'}>
@@ -111,6 +113,15 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
           Modo demo: el pago se simula, no se mueve dinero real.
         </p>
       )}
+      <DialogoConfirmacion
+        abierto={confirmandoIngreso}
+        titulo="Iniciar sesión para pagar"
+        detalle={<><p>Caserita usará tu cuenta de Google para crear o recuperar tu wallet segura.</p><p className="mt-2 font-semibold text-tinta">Continúa solamente si esta es tu cuenta.</p></>}
+        confirmar="Continuar"
+        cargando={ocupado}
+        alCerrar={() => setConfirmandoIngreso(false)}
+        alConfirmar={() => { setConfirmandoIngreso(false); void entrar(); }}
+      />
     </section>
   );
 }

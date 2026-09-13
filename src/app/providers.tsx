@@ -195,20 +195,24 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
 
   const entrar = useCallback(async () => {
     base.setError(null);
+    // Si la cookie propia venció pero Pollar conservó una sesión anterior, no
+    // la reutilizamos silenciosamente. Se limpia primero para que el acceso
+    // vuelva a pasar por el proveedor de identidad.
     if (isAuthenticated && wallet?.address) {
       base.setOcupado(true);
       try {
-        await abrirSesion(wallet.address);
+        await getClient().logout();
       } catch (e) {
         base.setError(mensajeDe(e));
+        base.setOcupado(false);
+        return;
       } finally {
         base.setOcupado(false);
       }
-      return;
     }
     setEsperandoLogin(true);
     login({ provider: 'google' });
-  }, [abrirSesion, base, isAuthenticated, login, wallet?.address]);
+  }, [base, getClient, isAuthenticated, login, wallet?.address]);
 
   const salir = useCallback(async () => {
     base.setError(null);

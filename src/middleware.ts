@@ -21,7 +21,7 @@ export function middleware(req: NextRequest) {
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://pollar.xyz",
     "font-src 'self' data:",
     "connect-src 'self' https://sdk.api.pollar.xyz https://api.pollar.xyz https://horizon.stellar.org https://horizon-testnet.stellar.org",
     "frame-src 'self' https://sdk.api.pollar.xyz",
