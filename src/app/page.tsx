@@ -56,8 +56,8 @@ export default function Inicio() {
         {error && <Aviso tono="error">{error}</Aviso>}
 
         <div>
-          <p className="text-xs font-black tracking-[0.12em] text-verde uppercase">Mis transacciones</p>
-          <h1 className="mt-1 text-2xl font-black tracking-tight">Compra y vende con tranquilidad</h1>
+          <p className="antetitulo">Mis transacciones</p>
+          <h1 className="mt-1 text-[1.7rem] leading-tight font-semibold">Compra y vende con tranquilidad</h1>
         </div>
 
         <ResumenDinero />
@@ -132,12 +132,32 @@ function Presentacion({
       <main className="contenedor py-8 sm:py-12">
         <div className="grid items-center gap-10 lg:grid-cols-[1.08fr_.92fr] lg:gap-14">
           <section className="space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-verde/10 bg-verde-claro px-3 py-1.5 text-xs font-black text-verde-oscuro">
+            <div className="inline-flex items-center gap-2 rounded-full border border-verde/12 bg-verde-claro/70 px-3 py-1.5 text-xs font-bold text-verde-oscuro shadow-[inset_0_1px_0_rgb(255_255_255/.6)]">
               <Icono nombre="escudo" className="size-4" /> Pagos seguros entre personas
             </div>
             <div className="space-y-4">
-              <h1 className="max-w-xl text-[2.55rem] leading-[.98] font-black tracking-[-0.055em] text-tinta sm:text-6xl">
-                Compra y vende <span className="text-verde">sin miedo.</span>
+              {/* La serif se gana el titular: es lo único de la página que tiene
+                  derecho a ser grande, y la voz humana acá vale más que el peso. */}
+              <h1 className="max-w-xl text-[3rem] leading-[0.97] font-semibold tracking-[-0.035em] text-tinta sm:text-[4.1rem]">
+                Compra y vende{' '}
+                <span className="relative inline-block text-verde">
+                  sin miedo
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 200 12"
+                    preserveAspectRatio="none"
+                    className="absolute -bottom-1 left-0 h-[0.42em] w-full text-verde/25"
+                  >
+                    <path
+                      d="M2 8.5C42 3.5 92 2.5 198 5.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                .
               </h1>
               <p className="max-w-lg text-base leading-relaxed text-tinta-2 sm:text-lg">
                 La plata queda protegida hasta la entrega. Tú vendes por Marketplace o WhatsApp;
@@ -176,7 +196,7 @@ function Presentacion({
             <div className="absolute -top-5 -right-3 size-24 rounded-full bg-verde-claro blur-2xl" />
             <div className="tarjeta relative overflow-hidden p-5 sm:p-7">
               <div className="patron-casas -mx-5 -mt-5 mb-6 flex items-center gap-3 bg-verde px-5 py-5 text-white sm:-mx-7 sm:-mt-7 sm:px-7">
-                <Isotipo className="size-12 bg-white/15 shadow-none" />
+                <Isotipo tono="claro" className="size-12" />
                 <div>
                   <p className="text-lg font-black">Así funciona Caserita</p>
                   <p className="text-xs text-white/75">Tres pasos y un trato tranquilo</p>

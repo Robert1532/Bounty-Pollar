@@ -1,4 +1,8 @@
 import type { Metadata, Viewport } from 'next';
+// Tipografías auto-hospedadas: viajan con el bundle, así que no dependen de
+// ningún CDN externo ni añaden una petición de bloqueo al primer render.
+import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource-variable/fraunces';
 import '@pollar/react/styles.css';
 import './globals.css';
 import { Proveedores } from './providers';
@@ -27,7 +31,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es-BO">
-      <body className="min-h-dvh">
+      <body className="grano min-h-dvh">
         <Proveedores>{children}</Proveedores>
       </body>
     </html>

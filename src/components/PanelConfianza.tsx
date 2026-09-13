@@ -32,10 +32,14 @@ export function PanelConfianza({ compacto = false }: { compacto?: boolean }) {
 
   if (!datos || datos.tratosTotales === 0) return null;
 
-  const celdas: { icono: NombreIcono; valor: string; etiqueta: string; tono: string }[] = [
+  const celdas: { icono: NombreIcono; valor: string; unidad?: string; etiqueta: string; tono: string }[] = [
     {
       icono: 'escudo',
-      valor: `${redondear(datos.protegidoAhoraUsdc)} USDC`,
+      valor: redondear(datos.protegidoAhoraUsdc),
+      // La unidad va aparte: en tres columnas a 390px, "80,49 USDC" se parte por
+      // la mitad y el monto deja de leerse de un vistazo, que es lo único que
+      // esta celda tiene que lograr.
+      unidad: 'USDC',
       etiqueta: datos.tratosEnCustodia === 1 ? 'protegidos en 1 trato' : `protegidos en ${datos.tratosEnCustodia} tratos`,
       tono: 'text-verde',
     },
@@ -71,7 +75,10 @@ export function PanelConfianza({ compacto = false }: { compacto?: boolean }) {
         {celdas.map((celda) => (
           <div key={celda.etiqueta} className="rounded-2xl bg-papel-2 px-3 py-4 text-center">
             <Icono nombre={celda.icono} className={`mx-auto mb-1.5 size-5 ${celda.tono}`} />
-            <p className="numeros text-lg leading-tight font-black sm:text-xl">{celda.valor}</p>
+            <p className="numeros text-lg leading-tight font-black whitespace-nowrap sm:text-xl">
+              {celda.valor}
+              {celda.unidad && <span className="ml-1 text-[0.6em] font-bold text-tinta-3">{celda.unidad}</span>}
+            </p>
             <p className="mt-1 text-[11px] leading-tight font-semibold text-tinta-3">{celda.etiqueta}</p>
           </div>
         ))}

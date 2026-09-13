@@ -1,14 +1,50 @@
 import type { SVGProps } from 'react';
 
-export function Isotipo({ className = '' }: { className?: string }) {
+/**
+ * El símbolo: un techo que cubre una moneda. "Una casa que guarda la plata."
+ *
+ * La versión anterior era una casita con ventanas y una sonrisa: siete trazos
+ * distintos que a 16px (el favicon, que es donde más se ve un logo) se
+ * convertían en una mancha. Acá quedan dos formas y una idea. El chevron es el
+ * techo, el círculo es el dinero, y el dinero está debajo del techo — que es
+ * literalmente lo que hace Caserita.
+ */
+export function Isotipo({ className = '', tono = 'solido' }: { className?: string; tono?: 'solido' | 'claro' }) {
   return (
-    <span aria-hidden="true" className={`grid place-items-center rounded-[0.85rem] bg-verde text-white shadow-[0_7px_18px_rgba(8,115,91,0.22)] ${className}`}>
-      <svg viewBox="0 0 40 40" className="h-[72%] w-[72%]" fill="none">
-        <path d="M5 18 20 7l15 11" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9 17v15h22V17" stroke="currentColor" strokeWidth="3.5" strokeLinejoin="round" />
-        <path d="M14 23.5c1.2 0 1.2-2 0-2s-1.2 2 0 2ZM26 23.5c1.2 0 1.2-2 0-2s-1.2 2 0 2Z" fill="currentColor" />
-        <path d="M16 27c2 2.2 6 2.2 8 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-      </svg>
+    <span
+      aria-hidden="true"
+      className={`isotipo grid place-items-center rounded-[30%] ${tono === 'claro' ? 'bg-white/15 text-white' : 'isotipo-solido text-white'} ${className}`}
+    >
+      <Simbolo className="h-[64%] w-[64%]" />
+    </span>
+  );
+}
+
+/** El símbolo suelto, sin la teja verde. Para el favicon y usos sobre color. */
+export function Simbolo({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} fill="none" aria-hidden="true">
+      <path
+        d="M7.6 20.4 20 11.2l12.4 9.2"
+        stroke="currentColor"
+        strokeWidth="3.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="20" cy="26.8" r="4.9" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * El nombre tipografiado. Fraunces para la palabra, con la "i" punteada por el
+ * mismo círculo del símbolo — el guiño que hace que logotipo e isotipo se lean
+ * como una sola cosa.
+ */
+export function Logotipo({ className = '' }: { className?: string }) {
+  return (
+    <span className={`fuente-display text-[1.15rem] leading-none font-semibold tracking-[-0.02em] ${className}`}>
+      Caserita
     </span>
   );
 }

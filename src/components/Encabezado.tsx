@@ -4,31 +4,23 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useSesion } from '@/lib/cliente/sesion';
 import { Spinner } from './ui/Boton';
-import { Isotipo } from './Marca';
+import { Isotipo, Logotipo } from './Marca';
 import { DialogoConfirmacion } from './ui/DialogoConfirmacion';
 
 export function Encabezado() {
-  const { usuario, salir, ocupado, cargando, config, modoMock } = useSesion();
+  const { usuario, salir, ocupado, cargando } = useSesion();
   const [confirmandoSalida, setConfirmandoSalida] = useState(false);
 
   return (
     <>
     <header className="sticky top-0 z-20 border-b border-verde/10 bg-papel/85 backdrop-blur-xl">
       <div className="contenedor flex h-[4.35rem] items-center justify-between gap-3">
-        <Link href="/" className="group flex items-center gap-2.5 font-black tracking-tight" aria-label="Caserita, ir al inicio">
-          <Isotipo className="size-10 transition-transform group-hover:-rotate-3" />
-          <span className="text-xl tracking-[-0.04em]">Caserita</span>
+        <Link href="/" className="group flex items-center gap-2.5" aria-label="Caserita, ir al inicio">
+          <Isotipo className="size-9 transition-transform duration-300 ease-suave group-hover:-translate-y-0.5" />
+          <Logotipo className="text-[1.3rem]" />
         </Link>
 
         <div className="flex items-center gap-2 text-sm">
-          {config?.red === 'testnet' && (
-            <>
-              <span className="rounded-full border border-naranja/10 bg-naranja-claro px-2 py-1 text-[9px] font-black tracking-[0.06em] text-naranja sm:hidden" title="Entorno de prueba: no se utiliza dinero real">PRUEBA</span>
-              <span className="hidden rounded-full border border-naranja/10 bg-naranja-claro px-2.5 py-1 text-[10px] font-black tracking-[0.06em] text-naranja sm:inline-flex" title="Entorno de prueba: no se utiliza dinero real">
-                {modoMock ? 'MODO DEMO' : 'PRUEBA · SIN DINERO REAL'}
-              </span>
-            </>
-          )}
           {cargando ? (
             <Spinner />
           ) : usuario ? (
