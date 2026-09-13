@@ -64,8 +64,22 @@ function useBase() {
 
 function mensajeDe(e: unknown): string {
   if (e instanceof ErrorApi) return e.message;
-  if (e instanceof Error) return e.message;
+  if (e instanceof Error) return mensajePollar(e.message);
   return 'Algo salió mal. Intenta de nuevo.';
+}
+
+/** El SDK devuelve algunos mensajes internos en inglés; nunca se muestran tal cual al usuario. */
+function mensajePollar(mensaje?: string): string {
+  const texto = mensaje?.trim() ?? '';
+  const esConexion = /failed to fetch|unexpected error|network|load sign-in/i.test(texto);
+
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port !== '3000') {
+    return 'Caserita debe abrirse en http://localhost:3000 para conectarse con Pollar. Cierra el otro servidor y vuelve a ejecutar npm run dev.';
+  }
+  if (esConexion) {
+    return 'No pudimos conectar con Pollar. Revisa tu conexión e intenta iniciar sesión nuevamente.';
+  }
+  return texto || 'No pudimos iniciar sesión con Pollar. Intenta nuevamente.';
 }
 
 function ProveedorPollar({ children }: { children: ReactNode }) {
@@ -96,7 +110,7 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       if (estado.step !== 'error') return;
       setEsperandoLogin(false);
       setOcupadoBase(false);
-      setErrorBase(estado.message || 'No pudimos iniciar sesión con Pollar.');
+      setErrorBase(mensajePollar(estado.message));
     });
   }, [getClient, setErrorBase, setOcupadoBase]);
 
