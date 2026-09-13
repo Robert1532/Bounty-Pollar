@@ -15,7 +15,8 @@ const ETIQUETAS: Record<EstadoTrato, { texto: string; clase: string }> = {
 export function EstadoBadge({ estado }: { estado: EstadoTrato }) {
   const { texto, clase } = ETIQUETAS[estado];
   return (
-    <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${clase}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] ${clase}`}>
+      <span className="size-1.5 rounded-full bg-current opacity-70" />
       {texto}
     </span>
   );

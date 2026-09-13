@@ -6,10 +6,11 @@ import { Encabezado } from '@/components/Encabezado';
 import { TratoCard } from '@/components/TratoCard';
 import { Vacio } from '@/components/Vacio';
 import { Aviso } from '@/components/ui/Aviso';
-import { Boton, Spinner } from '@/components/ui/Boton';
+import { Boton, Spinner, claseBoton } from '@/components/ui/Boton';
 import { useSesion } from '@/lib/cliente/sesion';
 import { get } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
+import { Icono, Isotipo, type NombreIcono } from '@/components/Marca';
 
 type Pestana = 'vendo' | 'compro';
 
@@ -47,16 +48,22 @@ export default function Inicio() {
   return (
     <>
       <Encabezado />
-      <main className="contenedor space-y-4 py-5 pb-28">
+      <main className="contenedor py-6 pb-28">
+        <div className="columna space-y-4">
         {error && <Aviso tono="error">{error}</Aviso>}
 
-        <div className="flex rounded-2xl bg-papel-2 p-1 text-sm font-semibold">
+        <div>
+          <p className="text-xs font-black tracking-[0.12em] text-verde uppercase">Mis transacciones</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight">Compra y vende con tranquilidad</h1>
+        </div>
+
+        <div className="flex rounded-2xl border border-borde bg-papel-2/80 p-1 text-sm font-bold">
           {(['vendo', 'compro'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPestana(p)}
-              className={`flex-1 rounded-xl py-2.5 capitalize transition ${
-                pestana === p ? 'bg-superficie text-tinta shadow-sm' : 'text-tinta-2'
+              className={`flex-1 rounded-xl py-3 capitalize transition ${
+                pestana === p ? 'bg-superficie text-verde shadow-sm' : 'text-tinta-2 hover:text-tinta'
               }`}
             >
               {p}
@@ -70,8 +77,9 @@ export default function Inicio() {
         {abrirHistorial && (
           <button
             onClick={abrirHistorial}
-            className="w-full rounded-2xl border border-borde bg-superficie py-3 text-sm font-semibold text-tinta-2"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-verde/15 bg-superficie py-3 text-sm font-bold text-verde-oscuro shadow-sm transition hover:bg-verde-claro/40"
           >
+            <Icono nombre="wallet" className="size-4" />
             Ver mis movimientos en Stellar
           </button>
         )}
@@ -96,12 +104,13 @@ export default function Inicio() {
             ))}
           </div>
         )}
+        </div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-borde bg-papel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-        <div className="contenedor py-3">
-          <Link href="/nuevo">
-            <Boton>+ Nuevo trato</Boton>
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-verde/10 bg-papel/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+        <div className="columna px-4 py-3">
+          <Link href="/nuevo" className={claseBoton()}>
+            <span aria-hidden>＋</span> Nuevo trato
           </Link>
         </div>
       </div>
@@ -121,44 +130,82 @@ function Presentacion({
   return (
     <>
       <Encabezado />
-      <main className="contenedor space-y-7 py-10">
-        <div className="space-y-3">
-          <h1 className="text-3xl leading-tight font-black tracking-tight">
-            Compra y vende sin miedo por Marketplace y WhatsApp.
-          </h1>
-          <p className="text-tinta-2">
-            La plata del comprador queda en custodia. El vendedor cobra recien cuando entrega y el
-            comprador le muestra un código de 6 dígitos. Si no hay entrega, el dinero vuelve solo.
-          </p>
-        </div>
+      <main className="contenedor py-8 sm:py-12">
+        <div className="grid items-center gap-10 lg:grid-cols-[1.08fr_.92fr] lg:gap-14">
+          <section className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-verde/10 bg-verde-claro px-3 py-1.5 text-xs font-black text-verde-oscuro">
+              <Icono nombre="escudo" className="size-4" /> Pagos seguros entre personas
+            </div>
+            <div className="space-y-4">
+              <h1 className="max-w-xl text-[2.55rem] leading-[.98] font-black tracking-[-0.055em] text-tinta sm:text-6xl">
+                Compra y vende <span className="text-verde">sin miedo.</span>
+              </h1>
+              <p className="max-w-lg text-base leading-relaxed text-tinta-2 sm:text-lg">
+                La plata queda protegida hasta la entrega. Tú vendes por Marketplace o WhatsApp;
+                Caserita se encarga de que el trato sea seguro.
+              </p>
+            </div>
 
-        <ol className="space-y-3">
-          {[
-            ['Creas el trato', 'Título, monto y lugar de entrega. Te damos un link corto.'],
-            ['Lo mandas por WhatsApp', 'El comprador paga desde su celular, entrando con Google.'],
-            ['Entregas y cobras', 'Te muestra su código, lo ingresas y la plata cae al instante.'],
-          ].map(([titulo, detalle], i) => (
-            <li key={titulo} className="tarjeta flex gap-3 p-4">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-verde-claro text-sm font-bold text-verde-oscuro">
-                {i + 1}
-              </span>
-              <div>
-                <p className="font-bold">{titulo}</p>
-                <p className="text-sm text-tinta-2">{detalle}</p>
+            {error && <Aviso tono="error">{error}</Aviso>}
+
+            <div className="max-w-md space-y-3">
+              <Boton onClick={() => void entrar()} cargando={ocupado}>
+                Entrar con Google <Icono nombre="flecha" className="size-5" />
+              </Boton>
+              <p className="flex items-center justify-center gap-1.5 text-center text-xs text-tinta-3">
+                <Icono nombre="escudo" className="size-3.5" /> Sin instalar wallets ni guardar frases semilla
+              </p>
+            </div>
+
+            <div className="grid max-w-lg grid-cols-3 gap-2 pt-2">
+              {([
+                ['escudo', 'Plata protegida'],
+                ['personas', 'De persona a persona'],
+                ['hoja', 'Local y simple'],
+              ] as [NombreIcono, string][]).map(([icono, texto]) => (
+                <div key={texto} className="text-center text-[11px] font-bold leading-tight text-tinta-2">
+                  <span className="mx-auto mb-2 grid size-9 place-items-center rounded-xl bg-verde-claro text-verde">
+                    <Icono nombre={icono} className="size-5" />
+                  </span>
+                  {texto}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="relative">
+            <div className="absolute -top-5 -right-3 size-24 rounded-full bg-verde-claro blur-2xl" />
+            <div className="tarjeta relative overflow-hidden p-5 sm:p-7">
+              <div className="patron-casas -mx-5 -mt-5 mb-6 flex items-center gap-3 bg-verde px-5 py-5 text-white sm:-mx-7 sm:-mt-7 sm:px-7">
+                <Isotipo className="size-12 bg-white/15 shadow-none" />
+                <div>
+                  <p className="text-lg font-black">Así funciona Caserita</p>
+                  <p className="text-xs text-white/75">Tres pasos y un trato tranquilo</p>
+                </div>
               </div>
-            </li>
-          ))}
-        </ol>
-
-        {error && <Aviso tono="error">{error}</Aviso>}
-
-        <div className="space-y-3">
-          <Boton onClick={() => void entrar()} cargando={ocupado}>
-            Entrar con Google
-          </Boton>
-          <p className="text-center text-xs text-tinta-3">
-            Sin instalar wallets, sin frase semilla, sin conseguir XLM.
-          </p>
+              <ol className="space-y-5">
+                {([
+                  ['enlace', 'Creas y compartes', 'Define el producto, el monto y manda el link.'],
+                  ['escudo', 'La plata queda en custodia', 'El pago se confirma en la red, pero aún no llega al vendedor.'],
+                  ['codigo', 'Entregas y cobras', 'El código de 6 dígitos libera el pago al instante.'],
+                ] as [NombreIcono, string, string][]).map(([icono, titulo, detalle], i) => (
+                  <li key={titulo} className="flex gap-4">
+                    <span className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-verde-claro text-verde">
+                      <Icono nombre={icono} className="size-5" />
+                      <span className="absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-naranja text-[9px] font-black text-white">{i + 1}</span>
+                    </span>
+                    <div>
+                      <p className="font-extrabold">{titulo}</p>
+                      <p className="mt-0.5 text-sm leading-relaxed text-tinta-2">{detalle}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-6 rounded-2xl bg-papel-2 px-4 py-3 text-center text-xs font-bold text-tinta-2">
+                Lo bueno de tu comunidad, ahora en un solo lugar.
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </>

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Boton } from './ui/Boton';
+import { Boton, claseBoton } from './ui/Boton';
 import { linkWhatsApp, mensajeInvitacion } from '@/lib/wa';
 import type { TratoPublico } from '@/lib/cliente/tipos';
+import { Icono } from './Marca';
 
 /**
  * El link es el producto: se crea el trato y se manda por WhatsApp. Enlaces
@@ -18,7 +19,7 @@ export function CompartirTrato({ trato }: { trato: TratoPublico }) {
   useEffect(() => {
     const completa = `${window.location.origin}/t/${trato.id}`;
     setUrl(completa);
-    QRCode.toDataURL(completa, { width: 512, margin: 1, color: { dark: '#1c1917', light: '#ffffff' } })
+    QRCode.toDataURL(completa, { width: 512, margin: 2, color: { dark: '#064f40', light: '#ffffff' } })
       .then(setQr)
       .catch(() => setQr(null));
   }, [trato.id]);
@@ -40,28 +41,32 @@ export function CompartirTrato({ trato }: { trato: TratoPublico }) {
   });
 
   return (
-    <section className="tarjeta space-y-4 p-4">
-      <h2 className="font-bold">Mándale el link a tu comprador</h2>
+    <section className="tarjeta space-y-5 p-5 sm:p-6">
+      <div>
+        <p className="text-xs font-black tracking-[.1em] text-verde uppercase">Siguiente paso</p>
+        <h2 className="mt-1 text-xl font-black">Mándale el link a tu comprador</h2>
+        <p className="mt-1 text-sm text-tinta-2">Puede abrirlo desde WhatsApp o escanear el QR.</p>
+      </div>
 
       {qr && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={qr}
           alt="Código QR del trato"
-          className="mx-auto w-44 rounded-2xl border border-borde"
+          className="mx-auto w-48 rounded-[1.4rem] border-8 border-white shadow-[0_12px_35px_rgba(21,51,43,0.12)]"
           width={176}
           height={176}
         />
       )}
 
-      <div className="números truncate rounded-2xl bg-papel-2 px-4 py-3 text-sm text-tinta-2">{url}</div>
+      <div className="numeros truncate rounded-2xl border border-borde bg-papel-2 px-4 py-3 text-sm text-tinta-2">{url}</div>
 
       <div className="grid grid-cols-2 gap-2">
         <Boton variante="fantasma" onClick={() => void copiar()}>
-          {copiado ? 'Copiado' : 'Copiar link'}
+          <Icono nombre={copiado ? 'check' : 'copiar'} className="size-4" /> {copiado ? 'Copiado' : 'Copiar link'}
         </Boton>
-        <a href={linkWhatsApp(mensaje)} target="_blank" rel="noopener noreferrer">
-          <Boton>WhatsApp</Boton>
+        <a href={linkWhatsApp(mensaje)} target="_blank" rel="noopener noreferrer" className={claseBoton()}>
+          <Icono nombre="whatsapp" className="size-5" /> WhatsApp
         </a>
       </div>
     </section>

@@ -9,6 +9,7 @@ import { AreaTexto, Campo } from '@/components/ui/Campo';
 import { useSesion } from '@/lib/cliente/sesion';
 import { post } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
+import { Icono } from '@/components/Marca';
 
 export default function NuevoTrato() {
   const router = useRouter();
@@ -67,10 +68,15 @@ export default function NuevoTrato() {
   return (
     <>
       <Encabezado />
-      <main className="contenedor py-5 pb-28">
-        <h1 className="mb-5 text-2xl font-black tracking-tight">Nuevo trato</h1>
+      <main className="contenedor py-6 pb-16">
+        <div className="columna">
+        <div className="mb-6">
+          <p className="text-xs font-black tracking-[.12em] text-verde uppercase">Vender con seguridad</p>
+          <h1 className="titulo-pagina mt-1">Crea un nuevo trato</h1>
+          <p className="mt-2 text-sm leading-relaxed text-tinta-2">Completa los datos y te daremos un link privado para tu comprador.</p>
+        </div>
 
-        <form onSubmit={enviar} className="space-y-4">
+        <form onSubmit={enviar} className="tarjeta space-y-5 p-5 sm:p-6">
           <Campo
             etiqueta="Qué vendes"
             placeholder="Celular Xiaomi Redmi Note 12"
@@ -82,15 +88,15 @@ export default function NuevoTrato() {
           />
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-sm font-semibold text-tinta-2">Monto</span>
-              <div className="flex rounded-full bg-papel-2 p-0.5 text-xs font-bold">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="etiqueta-campo mb-0">Monto acordado</span>
+              <div className="flex rounded-full border border-borde bg-papel-2 p-0.5 text-xs font-bold">
                 {(['BS', 'USDC'] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setMoneda(m)}
-                    className={`rounded-full px-3 py-1 ${moneda === m ? 'bg-superficie shadow-sm' : 'text-tinta-2'}`}
+                    className={`rounded-full px-3 py-1.5 transition ${moneda === m ? 'bg-superficie text-verde shadow-sm' : 'text-tinta-2'}`}
                   >
                     {m === 'BS' ? 'Bs' : 'USDC'}
                   </button>
@@ -106,9 +112,9 @@ export default function NuevoTrato() {
               value={monto}
               onChange={(e) => setMonto(e.target.value)}
               required
-              className="números w-full rounded-2xl border border-borde bg-superficie px-4 py-3.5 text-2xl font-bold focus:border-verde focus:outline-none"
+              className="entrada numeros text-2xl font-black text-verde-oscuro"
             />
-            <div className="mt-1.5 flex justify-between text-xs text-tinta-3">
+            <div className="mt-2 flex justify-between gap-3 text-xs text-tinta-3">
               <span>{equivalente}</span>
               {config && <span>Máximo {config.montoMaximoUsdc} USDC en esta versión</span>}
             </div>
@@ -133,14 +139,15 @@ export default function NuevoTrato() {
           {error && <Aviso tono="error">{error}</Aviso>}
 
           <Aviso tono="info">
-            Al crear el trato generamos un código de 6 dígitos. El comprador lo recibe al pagar y te lo
-            muestra en la entrega: es lo que libera tu pago.
+            <strong className="block text-tinta">Tu pago estará protegido</strong>
+            Al pagar, el comprador recibe un código de 6 dígitos. Te lo muestra durante la entrega y recién entonces cobras.
           </Aviso>
 
           <Boton type="submit" cargando={enviando}>
-            Crear trato y obtener el link
+            Crear trato y obtener el link <Icono nombre="flecha" className="size-5" />
           </Boton>
         </form>
+        </div>
       </main>
     </>
   );

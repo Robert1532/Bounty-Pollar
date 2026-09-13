@@ -6,6 +6,7 @@ import { Boton } from './ui/Boton';
 import { useSesion } from '@/lib/cliente/sesion';
 import { ErrorApi, post } from '@/lib/cliente/api';
 import type { TratoPublico } from '@/lib/cliente/tipos';
+import { Icono, type NombreIcono } from './Marca';
 
 /**
  * El pago del comprador.
@@ -72,13 +73,21 @@ export function PagarTrato({ trato, alActualizar }: { trato: TratoPublico; alAct
 
   return (
     <section className="space-y-3">
-      <div className="tarjeta space-y-2 p-4 text-sm text-tinta-2">
-        <p className="font-bold text-tinta">Qué pasa cuando pagas</p>
-        <p>
-          Tu plata no le llega al vendedor: queda retenida. Recibes un código de 6 dígitos y solo
-          cuando se lo muestres en la entrega se libera el pago.
-        </p>
-        <p>Si no hay entrega, a las 48 horas el dinero vuelve solo a tu wallet.</p>
+      <div className="tarjeta p-5 sm:p-6">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-2xl bg-verde-claro text-verde"><Icono nombre="escudo" className="size-6" /></span>
+          <div><p className="font-black text-tinta">Pagar con seguridad</p><p className="text-xs text-tinta-3">Tu dinero queda protegido</p></div>
+        </div>
+        <ol className="space-y-4 text-sm text-tinta-2">
+          {([
+            ['wallet', 'Pagas con USDC desde tu wallet Pollar.'],
+            ['escudo', 'El dinero queda en custodia, no va al vendedor.'],
+            ['codigo', 'Recibes un código y lo muestras al recibir.'],
+            ['reloj', 'Sin entrega, vuelve a tu wallet al vencer el plazo.'],
+          ] as [NombreIcono, string][]).map(([icono, texto], i) => (
+            <li key={texto} className="flex items-center gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-papel-2 text-verde"><Icono nombre={icono} className="size-4" /></span><span><strong className="text-tinta">{i + 1}.</strong> {texto}</span></li>
+          ))}
+        </ol>
       </div>
 
       {error && <Aviso tono="error">{error}</Aviso>}

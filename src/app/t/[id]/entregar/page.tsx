@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { use, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Encabezado } from '@/components/Encabezado';
 import { Aviso } from '@/components/ui/Aviso';
-import { Boton, Spinner } from '@/components/ui/Boton';
+import { Boton, Spinner, claseBoton } from '@/components/ui/Boton';
 import { get, post } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
+import { Icono } from '@/components/Marca';
 
 /**
  * La pantalla de la entrega. El vendedor ingresa los 6 digitos que le muestra
@@ -91,8 +92,8 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
         <Encabezado />
         <main className="contenedor space-y-4 py-10">
           <Aviso tono="alerta">Este trato no tiene plata lista para liberar.</Aviso>
-          <Link href={`/t/${id}`}>
-            <Boton variante="fantasma">Volver al trato</Boton>
+          <Link href={`/t/${id}`} className={claseBoton('fantasma')}>
+            Volver al trato
           </Link>
         </main>
       </>
@@ -102,16 +103,20 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
   return (
     <>
       <Encabezado />
-      <main className="contenedor space-y-5 py-6">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">Ingresa el código</h1>
-          <p className="mt-1 text-sm text-tinta-2">
+      <main className="contenedor py-6 pb-16">
+        <div className="columna space-y-5">
+        <div className="text-center">
+          <span className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-verde-claro text-verde"><Icono nombre="paquete" className="size-7" /></span>
+          <p className="text-xs font-black tracking-[.12em] text-verde uppercase">Confirmar entrega</p>
+          <h1 className="titulo-pagina mt-1">Ingresa el código</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-tinta-2">
             Pídele al comprador su código de 6 dígitos <span className="font-semibold">después</span> de
             entregarle {trato.titulo}.
           </p>
         </div>
 
-        <form onSubmit={enviar} className="space-y-4">
+        <form onSubmit={enviar} className="tarjeta space-y-5 p-5 sm:p-6">
+          <p className="text-center text-sm font-extrabold">Código del comprador</p>
           <div className="flex justify-between gap-2">
             {digitos.map((digito, i) => (
               <input
@@ -126,7 +131,7 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
                 autoComplete="one-time-code"
                 maxLength={6}
                 aria-label={`Dígito ${i + 1}`}
-                className="números h-16 w-full rounded-2xl border border-borde bg-superficie text-center text-2xl font-black focus:border-verde focus:outline-none"
+                className="numeros h-14 min-w-0 w-full rounded-xl border border-borde bg-papel text-center text-xl font-black text-verde-oscuro transition focus:border-verde focus:bg-white focus:shadow-[0_0_0_4px_rgba(8,115,91,.1)] focus:outline-none sm:h-16 sm:rounded-2xl sm:text-2xl"
               />
             ))}
           </div>
@@ -145,9 +150,10 @@ export default function Entregar({ params }: { params: Promise<{ id: string }> }
           </Boton>
         </form>
 
-        <Link href={`/t/${id}`} className="block text-center text-sm text-tinta-2 underline">
-          Volver al trato
+        <Link href={`/t/${id}`} className="block text-center text-sm font-bold text-tinta-2 hover:text-verde">
+          ← Volver al trato
         </Link>
+        </div>
       </main>
     </>
   );

@@ -1,83 +1,97 @@
 @import 'tailwindcss';
 
-/*
- * Caserita — sistema visual.
- * Movil primero: el jurado y los usuarios abren esto desde el celular, no
- * desde una laptop. Tipografia grande, botones de dedo, cero ornamento.
- */
-
+/* Caserita — una interfaz cálida, local y confiable. */
 @theme {
-  --color-papel: #faf7f2;
-  --color-papel-2: #f2ede4;
-  --color-tinta: #1c1917;
-  --color-tinta-2: #57534e;
-  --color-tinta-3: #a8a29e;
-  --color-borde: #e7e1d6;
+  --color-papel: #fbfaf4;
+  --color-papel-2: #f2f0e7;
+  --color-tinta: #15332b;
+  --color-tinta-2: #53625c;
+  --color-tinta-3: #8c9993;
+  --color-borde: #dfe5d9;
   --color-superficie: #ffffff;
-
-  --color-verde: #15803d;
-  --color-verde-claro: #dcfce7;
-  --color-verde-oscuro: #14532d;
-  --color-naranja: #ea580c;
-  --color-naranja-claro: #ffedd5;
-  --color-rojo: #b91c1c;
-  --color-rojo-claro: #fee2e2;
-  --color-azul: #1d4ed8;
-  --color-azul-claro: #dbeafe;
-
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-
-  --radius-caja: 1rem;
+  --color-verde: #08735b;
+  --color-verde-claro: #e1f4dc;
+  --color-verde-oscuro: #064f40;
+  --color-naranja: #b95b16;
+  --color-naranja-claro: #fff0d7;
+  --color-rojo: #ad3232;
+  --color-rojo-claro: #fde8e5;
+  --color-azul: #24645a;
+  --color-azul-claro: #e2f1ed;
+  --font-sans: ui-rounded, 'Nunito Sans', 'Avenir Next', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --radius-caja: 1.5rem;
 }
 
 @layer base {
-  * {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html {
-    background-color: var(--color-papel);
-  }
-
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--color-papel); }
   body {
-    background-color: var(--color-papel);
+    min-width: 320px;
+    background:
+      radial-gradient(circle at 4% 2%, rgb(199 232 188 / 0.55), transparent 19rem),
+      radial-gradient(circle at 96% 8%, rgb(227 242 207 / 0.65), transparent 22rem),
+      var(--color-papel);
     color: var(--color-tinta);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: none;
   }
-
-  /* Nada de zoom automatico en iOS al enfocar un input. */
-  input,
-  textarea,
-  select,
-  button {
-    font-size: 16px;
-    font-family: inherit;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--color-verde);
-    outline-offset: 2px;
-  }
+  input, textarea, select, button { font-size: 16px; font-family: inherit; }
+  button, a { touch-action: manipulation; }
+  :focus-visible { outline: 3px solid rgb(8 115 91 / 0.28); outline-offset: 3px; }
+  ::selection { background: var(--color-verde-claro); color: var(--color-verde-oscuro); }
 }
 
 @layer components {
   .contenedor {
     width: 100%;
-    max-width: 30rem;
+    max-width: 68rem;
     margin-inline: auto;
-    padding-inline: 1rem;
+    padding-inline: clamp(1rem, 4vw, 2rem);
   }
-
+  .columna { width: 100%; max-width: 35rem; margin-inline: auto; }
   .tarjeta {
-    background: var(--color-superficie);
+    background: rgb(255 255 255 / 0.93);
     border: 1px solid var(--color-borde);
     border-radius: var(--radius-caja);
+    box-shadow: 0 12px 35px rgb(21 51 43 / 0.055);
   }
+  .tarjeta-suave {
+    background: linear-gradient(145deg, rgb(255 255 255 / 0.94), rgb(246 249 240 / 0.94));
+    border: 1px solid rgb(8 115 91 / 0.12);
+    border-radius: var(--radius-caja);
+  }
+  .titulo-pagina {
+    font-size: clamp(1.75rem, 5vw, 2.35rem);
+    line-height: 1.08;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+  }
+  .etiqueta-campo { margin-bottom: .45rem; display: block; color: var(--color-tinta); font-size: .875rem; font-weight: 800; }
+  .entrada {
+    width: 100%;
+    border: 1px solid var(--color-borde);
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 0.96);
+    padding: .9rem 1rem;
+    color: var(--color-tinta);
+    box-shadow: 0 1px 0 rgb(21 51 43 / .03);
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .entrada::placeholder { color: var(--color-tinta-3); }
+  .entrada:hover { border-color: rgb(8 115 91 / .35); }
+  .entrada:focus { border-color: var(--color-verde); box-shadow: 0 0 0 4px rgb(8 115 91 / .1); outline: none; }
+  .numeros { font-variant-numeric: tabular-nums; letter-spacing: .025em; }
+  .patron-casas {
+    background-image:
+      linear-gradient(135deg, rgb(255 255 255 / .12) 25%, transparent 25%),
+      linear-gradient(225deg, rgb(255 255 255 / .08) 25%, transparent 25%);
+    background-position: 0 0, 14px 0;
+    background-size: 28px 28px;
+  }
+}
 
-  .numeros {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.05em;
-  }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes aparecer { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  main > * { animation: aparecer 320ms ease-out both; }
 }
