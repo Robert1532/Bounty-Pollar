@@ -8,6 +8,7 @@ Ninguna de las dos partes instala una wallet, ve una frase semilla ni necesita X
 > Bounty Pollar · Buildathon Cochabamba 2026 · Ethereum Bolivia
 
 | | |
+s
 |---|---|
 | **Demo pública** | _(completar con la URL de Vercel)_ |
 | **Video** | _(completar)_ |
