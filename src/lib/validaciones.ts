@@ -51,7 +51,20 @@ export const confirmarSchema = z
   })
   .strict();
 
-export const devolverSchema = z.object({}).strict();
+export const devolverSchema = z
+  .object({
+    motivo: z.enum(['PLAZO_VENCIDO', 'ACORDADA']).optional(),
+  })
+  .strict();
+
+export const reportarProblemaSchema = z
+  .object({
+    motivo: z.enum(['PRODUCTO_DANADO', 'PRODUCTO_INCORRECTO', 'PEDIDO_INCOMPLETO', 'OTRO']),
+    detalle: z.string().trim().max(500, 'El detalle es demasiado largo').optional().or(z.literal('')),
+  })
+  .strict();
+
+export type ReportarProblemaInput = z.infer<typeof reportarProblemaSchema>;
 
 export const sesionSchema = z
   .object({
@@ -59,6 +72,12 @@ export const sesionSchema = z
     firma: z.string().min(40).max(200),
     direccion: direccionStellar,
     nombre: z.string().trim().max(80).optional(),
+  })
+  .strict();
+
+export const perfilSchema = z
+  .object({
+    nombre: z.string().trim().min(1, 'Escribe tu nombre').max(80),
   })
   .strict();
 

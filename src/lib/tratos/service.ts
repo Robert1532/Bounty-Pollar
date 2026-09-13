@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, lte, sum, sql as sqlRaw } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, sql as sqlRaw } from 'drizzle-orm';
 import { db, tratos, users, type EstadoTrato, type Trato, type User } from '@/db';
 import { serverEnv } from '../env';
 import { ErrorApp, errores } from '../errors';
@@ -10,7 +10,7 @@ import { generarCodigo, hashearCodigo, MAX_INTENTOS, verificarCodigo } from '../
 import { nuevoIdTrato } from '../ids';
 import { aStroops, bsAUsdc, normalizarMonto } from '../money';
 import { buscarDeposito, consultarTx, direccionEscrow, enviarDesdeEscrow } from '../stellar';
-import type { CrearTratoInput } from '../validaciones';
+import type { CrearTratoInput, ReportarProblemaInput } from '../validaciones';
 import { aTratoPublico, type TratoPublico } from './dto';
 import { yaFueCalificado } from './calificaciones';
 import { registrarResultado } from './reputacion';
@@ -259,6 +259,9 @@ export async function liberar(params: {
     if (trato.estado === 'LIBERADO') return trato;
   }
   if (trato.estado !== 'FINANCIADO') throw errores.estadoInvalido('Este trato no tiene plata lista para liberar.');
+  if (trato.reportadoEn) {
+    throw errores.estadoInvalido('El comprador reportó un problema. El pago está congelado y no se puede liberar.');
+  }
   if (trato.codigoBloqueado) {
     throw new ErrorApp(
       'CODIGO_BLOQUEADO',
@@ -311,7 +314,7 @@ export async function liberar(params: {
   const tomado = await db
     .update(tratos)
     .set({ estado: 'LIBERANDO', updatedAt: new Date() })
-    .where(and(eq(tratos.id, trato.id), eq(tratos.estado, 'FINANCIADO')))
+    .where(and(eq(tratos.id, trato.id), eq(tratos.estado, 'FINANCIADO'), isNull(tratos.reportadoEn)))
     .returning({ id: tratos.id });
   if (tomado.length === 0) return obtenerTrato(trato.id);
 
@@ -336,7 +339,7 @@ export async function liberar(params: {
  */
 export async function devolver(params: {
   id: string;
-  motivo: 'PLAZO_VENCIDO';
+  motivo: 'PLAZO_VENCIDO' | 'ACORDADA';
   actor?: User | null;
   ip?: string | null;
 }): Promise<Trato> {
@@ -359,10 +362,17 @@ export async function devolver(params: {
   if (trato.estado !== 'FINANCIADO') throw errores.estadoInvalido('Este trato no tiene plata en custodia.');
   if (!trato.compradorAddress) throw errores.estadoInvalido('No sabemos a quién devolver.');
 
-  if (!plazoDevolucionVencido(trato.liberaHasta)) {
+  if (params.motivo === 'ACORDADA') {
+    if (!params.actor || params.actor.id !== trato.vendedorId) {
+      throw errores.sinPermiso('Solo el vendedor puede confirmar que recibió la devolución.');
+    }
+    if (!trato.reportadoEn) {
+      throw errores.estadoInvalido('Primero el comprador debe reportar el problema.');
+    }
+  } else if (!plazoDevolucionVencido(trato.liberaHasta)) {
     throw errores.estadoInvalido('Todavía no vence el plazo de entrega.');
   }
-  if (params.actor && params.actor.id !== trato.compradorId && params.actor.id !== trato.vendedorId) {
+  if (params.motivo === 'PLAZO_VENCIDO' && params.actor && params.actor.id !== trato.compradorId && params.actor.id !== trato.vendedorId) {
     // El cron llama sin actor. Una persona solo puede empujar la devolucion de
     // un trato del que es parte, aunque el plazo ya haya vencido.
     throw errores.sinPermiso();
@@ -387,6 +397,54 @@ export async function devolver(params: {
     actor: params.actor?.walletAddress ?? 'sistema',
     ip: params.ip,
   });
+}
+
+/**
+ * Registra un producto dañado, incorrecto o incompleto. Si la plata sigue en
+ * custodia, este dato bloquea atómicamente el uso del código. Si ya fue
+ * liberada, queda como reporte para soporte, porque Stellar no permite
+ * deshacer una transferencia confirmada.
+ */
+export async function reportarProblema(params: {
+  id: string;
+  datos: ReportarProblemaInput;
+  actor: User;
+  ip?: string | null;
+}): Promise<Trato> {
+  const trato = await obtenerTrato(params.id);
+  if (trato.compradorId !== params.actor.id) {
+    throw errores.sinPermiso('Solo el comprador puede reportar este pedido.');
+  }
+  if (trato.reportadoEn) return trato;
+  if (trato.estado !== 'FINANCIADO' && trato.estado !== 'LIBERADO') {
+    throw errores.estadoInvalido('Este pedido todavía no se puede reportar.');
+  }
+
+  const ahora = new Date();
+  const filas = await db
+    .update(tratos)
+    .set({
+      reporteMotivo: params.datos.motivo,
+      reporteDetalle: params.datos.detalle || null,
+      reportadoEn: ahora,
+      updatedAt: ahora,
+    })
+    .where(and(eq(tratos.id, trato.id), eq(tratos.estado, trato.estado), isNull(tratos.reportadoEn)))
+    .returning();
+  if (filas.length === 0) {
+    const actual = await obtenerTrato(trato.id);
+    if (actual.reportadoEn) return actual;
+    throw errores.estadoInvalido('El pago cambió de estado antes de registrar el reporte.');
+  }
+
+  await registrarEvento({
+    tratoId: trato.id,
+    tipo: 'PROBLEMA_REPORTADO',
+    payload: { motivo: params.datos.motivo, detalle: params.datos.detalle || null },
+    actorAddr: params.actor.walletAddress,
+    ip: params.ip,
+  });
+  return filas[0] as Trato;
 }
 
 export async function cancelar(params: { id: string; actor: User; ip?: string | null }): Promise<Trato> {
@@ -417,7 +475,7 @@ export async function cancelar(params: { id: string; actor: User; ip?: string | 
 export async function codigoParaComprador(params: { id: string; actor: User }): Promise<string> {
   const trato = await obtenerTrato(params.id);
   if (trato.compradorId !== params.actor.id) throw errores.sinPermiso('Este código es del comprador.');
-  if (!tienePlataRetenida(trato.estado)) {
+  if (trato.estado !== 'FINANCIADO' || trato.reportadoEn) {
     throw errores.estadoInvalido('El código aparece cuando el pago está en custodia.');
   }
   return descifrar(trato.codigoCifrado);
@@ -586,6 +644,9 @@ export async function adjuntarEvidencia(params: {
   if (trato.estado !== 'FINANCIADO') {
     throw errores.estadoInvalido('La foto se adjunta mientras la plata está en custodia.');
   }
+  if (trato.reportadoEn) {
+    throw errores.estadoInvalido('El comprador reportó un problema; no se puede cambiar la evidencia.');
+  }
 
   const archivo = await guardarEvidencia({ tratoId: trato.id, datos: params.datos });
   const anterior = trato.evidenciaRuta;
@@ -671,38 +732,53 @@ export async function resumenDeUsuario(usuario: User): Promise<{
   ventasCompletadas: number;
   comprasCompletadas: number;
 }> {
-  const [porCobrar, protegido, gastado, fila] = await Promise.all([
-    db
-      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
-      .from(tratos)
-      .where(and(eq(tratos.vendedorId, usuario.id), inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO']))),
-    db
-      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
-      .from(tratos)
-      .where(
-        and(
-          eq(tratos.compradorId, usuario.id),
-          inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO']),
-        ),
-      ),
-    db
-      .select({ monto: sum(tratos.montoUsdc) })
-      .from(tratos)
-      .where(and(eq(tratos.compradorId, usuario.id), eq(tratos.estado, 'LIBERADO'))),
-    db.select().from(users).where(eq(users.id, usuario.id)).limit(1),
-  ]);
-
-  const yo = fila[0];
+  // Un solo viaje a la base. Con una base remota, cuatro SELECT paralelos no
+  // son "más rápidos": fuerzan varias conexiones TLS al pooler y pueden dejar
+  // toda la pantalla esperando cuando Supavisor limita las conexiones.
+  const filas = await db.execute(sqlRaw<{
+    por_cobrar_monto: string;
+    tratos_por_cobrar: number;
+    protegido_monto: string;
+    tratos_protegidos: number;
+    gastado_monto: string;
+  }>`
+    select
+      coalesce(sum(monto_usdc) filter (
+        where vendedor_id = ${usuario.id} and estado in ('FINANCIADO', 'LIBERANDO')
+      ), 0)::text as por_cobrar_monto,
+      count(*) filter (
+        where vendedor_id = ${usuario.id} and estado in ('FINANCIADO', 'LIBERANDO')
+      )::int as tratos_por_cobrar,
+      coalesce(sum(monto_usdc) filter (
+        where comprador_id = ${usuario.id} and estado in ('FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO')
+      ), 0)::text as protegido_monto,
+      count(*) filter (
+        where comprador_id = ${usuario.id} and estado in ('FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO')
+      )::int as tratos_protegidos,
+      coalesce(sum(monto_usdc) filter (
+        where comprador_id = ${usuario.id} and estado = 'LIBERADO'
+      ), 0)::text as gastado_monto
+    from tratos
+  `);
+  const fila = filas[0] as
+    | {
+        por_cobrar_monto: string;
+        tratos_por_cobrar: number;
+        protegido_monto: string;
+        tratos_protegidos: number;
+        gastado_monto: string;
+      }
+    | undefined;
 
   return {
-    porCobrarUsdc: normalizarMonto(porCobrar[0]?.monto ?? '0'),
-    tratosPorCobrar: porCobrar[0]?.cantidad ?? 0,
-    protegidoUsdc: normalizarMonto(protegido[0]?.monto ?? '0'),
-    tratosProtegidos: protegido[0]?.cantidad ?? 0,
-    cobradoUsdc: normalizarMonto(yo?.volumenVendidoUsdc ?? '0'),
-    gastadoUsdc: normalizarMonto(gastado[0]?.monto ?? '0'),
-    ventasCompletadas: yo?.ventasCompletadas ?? 0,
-    comprasCompletadas: yo?.comprasCompletadas ?? 0,
+    porCobrarUsdc: normalizarMonto(fila?.por_cobrar_monto ?? '0'),
+    tratosPorCobrar: Number(fila?.tratos_por_cobrar ?? 0),
+    protegidoUsdc: normalizarMonto(fila?.protegido_monto ?? '0'),
+    tratosProtegidos: Number(fila?.tratos_protegidos ?? 0),
+    cobradoUsdc: normalizarMonto(usuario.volumenVendidoUsdc),
+    gastadoUsdc: normalizarMonto(fila?.gastado_monto ?? '0'),
+    ventasCompletadas: usuario.ventasCompletadas,
+    comprasCompletadas: usuario.comprasCompletadas,
   };
 }
 
@@ -725,32 +801,52 @@ export async function estadisticasPublicas(): Promise<{
   personas: number;
   tasaEntrega: number | null;
 }> {
-  const [custodia, completados, devueltos, totales, personas] = await Promise.all([
-    db
-      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
-      .from(tratos)
-      .where(inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'])),
-    db
-      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
-      .from(tratos)
-      .where(eq(tratos.estado, 'LIBERADO')),
-    db.select({ cantidad: count() }).from(tratos).where(eq(tratos.estado, 'DEVUELTO')),
-    db.select({ cantidad: count() }).from(tratos),
-    db.select({ cantidad: count() }).from(users),
-  ]);
-
-  const completadosN = completados[0]?.cantidad ?? 0;
-  const devueltosN = devueltos[0]?.cantidad ?? 0;
+  const filas = await db.execute(sqlRaw<{
+    protegido_monto: string;
+    tratos_custodia: number;
+    completados_monto: string;
+    tratos_completados: number;
+    tratos_devueltos: number;
+    tratos_totales: number;
+    personas: number;
+  }>`
+    select
+      coalesce(sum(monto_usdc) filter (
+        where estado in ('FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO')
+      ), 0)::text as protegido_monto,
+      count(*) filter (
+        where estado in ('FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO')
+      )::int as tratos_custodia,
+      coalesce(sum(monto_usdc) filter (where estado = 'LIBERADO'), 0)::text as completados_monto,
+      count(*) filter (where estado = 'LIBERADO')::int as tratos_completados,
+      count(*) filter (where estado = 'DEVUELTO')::int as tratos_devueltos,
+      count(*)::int as tratos_totales,
+      (select count(*)::int from users) as personas
+    from tratos
+  `);
+  const fila = filas[0] as
+    | {
+        protegido_monto: string;
+        tratos_custodia: number;
+        completados_monto: string;
+        tratos_completados: number;
+        tratos_devueltos: number;
+        tratos_totales: number;
+        personas: number;
+      }
+    | undefined;
+  const completadosN = Number(fila?.tratos_completados ?? 0);
+  const devueltosN = Number(fila?.tratos_devueltos ?? 0);
   const cerrados = completadosN + devueltosN;
 
   return {
-    protegidoAhoraUsdc: normalizarMonto(custodia[0]?.monto ?? '0'),
-    tratosEnCustodia: custodia[0]?.cantidad ?? 0,
+    protegidoAhoraUsdc: normalizarMonto(fila?.protegido_monto ?? '0'),
+    tratosEnCustodia: Number(fila?.tratos_custodia ?? 0),
     tratosCompletados: completadosN,
-    volumenCompletadoUsdc: normalizarMonto(completados[0]?.monto ?? '0'),
+    volumenCompletadoUsdc: normalizarMonto(fila?.completados_monto ?? '0'),
     tratosDevueltos: devueltosN,
-    tratosTotales: totales[0]?.cantidad ?? 0,
-    personas: personas[0]?.cantidad ?? 0,
+    tratosTotales: Number(fila?.tratos_totales ?? 0),
+    personas: Number(fila?.personas ?? 0),
     tasaEntrega: cerrados === 0 ? null : Math.round((completadosN / cerrados) * 100),
   };
 }

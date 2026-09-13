@@ -22,6 +22,20 @@
       "when": 1789277097820,
       "tag": "0002_calificaciones",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789306481258,
+      "tag": "0003_misty_scarlet_spider",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789307269035,
+      "tag": "0004_ordinary_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

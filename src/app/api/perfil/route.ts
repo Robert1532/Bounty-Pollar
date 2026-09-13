@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requerirUsuario } from '@/lib/auth';
-import { manejarError, ok } from '@/lib/http';
+import { leerJson, manejarError, ok, verificarOrigen } from '@/lib/http';
 import { reputacionDe } from '@/lib/tratos/reputacion';
 import { distribucionDe } from '@/lib/tratos/calificaciones';
 import { resumenDeUsuario } from '@/lib/tratos/service';
+import { db, users } from '@/db';
+import { eq } from 'drizzle-orm';
+import { perfilSchema } from '@/lib/validaciones';
+import { usuarioDeSesion, urlAvatarDe } from '@/lib/perfil';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,6 +32,7 @@ export async function GET(): Promise<NextResponse> {
       {
         direccion: usuario.walletAddress,
         nombre: usuario.nombre,
+        avatarUrl: urlAvatarDe(usuario),
         desde: usuario.createdAt.toISOString(),
         reputacion: reputacionDe(usuario),
         resumen,
@@ -35,6 +40,22 @@ export async function GET(): Promise<NextResponse> {
       },
       { headers: { 'Cache-Control': 'no-store, private' } },
     );
+  } catch (error) {
+    return manejarError(error);
+  }
+}
+
+export async function PATCH(req: Request): Promise<NextResponse> {
+  try {
+    verificarOrigen(req);
+    const usuario = await requerirUsuario();
+    const datos = await leerJson(req, perfilSchema);
+    const [actualizado] = await db
+      .update(users)
+      .set({ nombre: datos.nombre, updatedAt: new Date() })
+      .where(eq(users.id, usuario.id))
+      .returning();
+    return ok(usuarioDeSesion(actualizado ?? usuario));
   } catch (error) {
     return manejarError(error);
   }

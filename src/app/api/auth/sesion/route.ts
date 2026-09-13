@@ -10,6 +10,7 @@ import { ipDe, limitar } from '@/lib/rate-limit';
 import { ErrorApp, errores } from '@/lib/errors';
 import { sesionSchema } from '@/lib/validaciones';
 import { log } from '@/lib/logger';
+import { usuarioDeSesion } from '@/lib/perfil';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,7 +84,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       .where(lt(authNonces.expiraEn, new Date(Date.now() - 60 * 60 * 1000)))
       .catch(() => undefined);
 
-    return ok({ id: usuario.id, direccion: usuario.walletAddress, nombre: usuario.nombre });
+    return ok(usuarioDeSesion(usuario));
   } catch (error) {
     return manejarError(error);
   }

@@ -22,6 +22,7 @@ export const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp'] as con
 export type TipoImagen = (typeof TIPOS_PERMITIDOS)[number];
 
 export const MAX_BYTES_EVIDENCIA = 5 * 1024 * 1024;
+export const MAX_BYTES_AVATAR = 2 * 1024 * 1024;
 const SEGUNDOS_URL_FIRMADA = 300;
 /**
  * Tiempos generosos a propósito: con un proyecto de Supabase en otra región, o
@@ -100,6 +101,32 @@ export async function guardarEvidencia(params: {
   }
   return archivo;
 }
+
+/** Avatar cuadrado o retrato del usuario, guardado en el mismo bucket privado. */
+export async function guardarAvatar(params: {
+  usuarioId: string;
+  datos: Uint8Array;
+}): Promise<ArchivoGuardado> {
+  const tipo = detectarTipoImagen(params.datos);
+  if (!tipo) throw errores.datosInvalidos('Solo aceptamos fotos JPG, PNG o WEBP.');
+  if (params.datos.byteLength > MAX_BYTES_AVATAR) {
+    throw errores.datosInvalidos('La foto de perfil no puede pesar más de 2 MB.');
+  }
+
+  const ruta = `perfiles/${params.usuarioId}/${randomBytes(12).toString('hex')}.${extensionDe(tipo)}`;
+  const archivo: ArchivoGuardado = {
+    ruta,
+    tipo,
+    bytes: params.datos.byteLength,
+    hash: hashDe(params.datos),
+  };
+  if (usaSupabase()) await subirASupabase(ruta, params.datos, tipo);
+  else memoria.set(ruta, { datos: new Uint8Array(params.datos), tipo });
+  return archivo;
+}
+
+export const descargarAvatar = descargarEvidencia;
+export const borrarAvatar = borrarEvidencia;
 
 /**
  * Une el origen de Supabase con lo que devuelve la API de firma.

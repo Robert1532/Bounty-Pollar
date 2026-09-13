@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Encabezado } from '@/components/Encabezado';
 import { Estrellas, Estrella } from '@/components/Estrellas';
 import { BotonSoporte } from '@/components/BotonSoporte';
@@ -11,6 +11,9 @@ import { Icono, type NombreIcono } from '@/components/Marca';
 import { get } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { Perfil } from '@/lib/cliente/tipos';
+import { AvatarUsuario } from '@/components/AvatarUsuario';
+
+const MAX_BYTES_AVATAR = 2 * 1024 * 1024;
 
 const ETIQUETA_NIVEL = {
   nuevo: 'Vendedor nuevo',
@@ -35,19 +38,51 @@ const CLASE_NIVEL = {
  * pagar, que es donde sirve.
  */
 export default function PaginaPerfil() {
-  const { usuario, cargando, entrar, ocupado, abrirHistorial } = useSesion();
+  const { usuario, cargando, entrar, ocupado, abrirHistorial, refrescar } = useSesion();
   const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [errorFoto, setErrorFoto] = useState<string | null>(null);
+  const entradaFoto = useRef<HTMLInputElement | null>(null);
+
+  const cargarPerfil = useCallback(async () => {
+    const datos = await get<Perfil>('/api/perfil');
+    setPerfil(datos);
+  }, []);
 
   useEffect(() => {
     if (!usuario) return;
-    let vivo = true;
-    get<Perfil>('/api/perfil')
-      .then((d) => vivo && setPerfil(d))
-      .catch(() => undefined);
-    return () => {
-      vivo = false;
-    };
-  }, [usuario]);
+    void cargarPerfil().catch(() => undefined);
+  }, [cargarPerfil, usuario]);
+
+  async function subirFoto(archivo: File) {
+    setErrorFoto(null);
+    if (archivo.size > MAX_BYTES_AVATAR) {
+      setErrorFoto('La foto no puede pesar más de 2 MB.');
+      return;
+    }
+    setSubiendoFoto(true);
+    try {
+      const cuerpo = new FormData();
+      cuerpo.append('foto', archivo);
+      const respuesta = await fetch('/api/perfil/avatar', {
+        method: 'POST',
+        body: cuerpo,
+        credentials: 'same-origin',
+      });
+      const json = (await respuesta.json()) as
+        | { ok: true; data: { avatarUrl: string } }
+        | { ok: false; error: { mensaje: string } };
+      if (!respuesta.ok || json.ok === false) {
+        throw new Error('error' in json ? json.error.mensaje : 'No pudimos guardar la foto.');
+      }
+      setPerfil((actual) => actual ? { ...actual, avatarUrl: json.data.avatarUrl } : actual);
+      await refrescar();
+    } catch (error) {
+      setErrorFoto(error instanceof Error ? error.message : 'No pudimos guardar la foto.');
+    } finally {
+      setSubiendoFoto(false);
+    }
+  }
 
   if (cargando) {
     return (
@@ -87,11 +122,25 @@ export default function PaginaPerfil() {
         <div className="columna space-y-4">
           <section className="tarjeta overflow-hidden">
             <div className="patron-casas flex items-center gap-4 bg-verde px-5 py-6 text-white">
-              <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/15 text-2xl font-black">
-                {(perfil?.nombre ?? 'C').slice(0, 1).toUpperCase()}
-              </span>
+              <div className="relative shrink-0">
+                <AvatarUsuario
+                  nombre={perfil?.nombre ?? usuario.nombre}
+                  url={perfil?.avatarUrl ?? usuario.avatarUrl}
+                  className="size-16 border-2 border-white/50 text-2xl shadow-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => entradaFoto.current?.click()}
+                  disabled={subiendoFoto}
+                  className="absolute -right-1 -bottom-1 grid size-7 place-items-center rounded-full border-2 border-verde bg-white text-verde shadow-md transition hover:scale-105 disabled:opacity-60"
+                  aria-label={perfil?.avatarUrl ? 'Cambiar foto de perfil' : 'Añadir foto de perfil'}
+                  title={perfil?.avatarUrl ? 'Cambiar foto' : 'Añadir foto'}
+                >
+                  {subiendoFoto ? <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" /> : <Icono nombre="camara" className="size-3.5" />}
+                </button>
+              </div>
               <div className="min-w-0">
-                <p className="truncate text-lg font-black">{perfil?.nombre ?? 'Mi cuenta'}</p>
+                <p className="truncate text-lg font-black">{perfil?.nombre ?? usuario.nombre ?? 'Mi cuenta'}</p>
                 <p className="numeros truncate text-xs text-white/70" title={usuario.direccion}>
                   {usuario.direccion.slice(0, 6)}…{usuario.direccion.slice(-6)}
                 </p>
@@ -100,8 +149,28 @@ export default function PaginaPerfil() {
                     En Caserita desde {new Date(perfil.desde).toLocaleDateString('es-BO', { month: 'short', year: 'numeric' })}
                   </p>
                 )}
+                <button
+                  type="button"
+                  onClick={() => entradaFoto.current?.click()}
+                  disabled={subiendoFoto}
+                  className="mt-2 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-60"
+                >
+                  {subiendoFoto ? 'Subiendo…' : perfil?.avatarUrl ? 'Cambiar foto' : 'Añadir foto'}
+                </button>
               </div>
             </div>
+
+            <input
+              ref={entradaFoto}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(evento) => {
+                const archivo = evento.target.files?.[0];
+                evento.target.value = '';
+                if (archivo) void subirFoto(archivo);
+              }}
+            />
 
             <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4">
               <span className={`rounded-full px-3 py-1 text-[11px] font-black ${CLASE_NIVEL[nivel]}`}>
@@ -110,6 +179,8 @@ export default function PaginaPerfil() {
               {rep && <Estrellas datos={rep.estrellas} />}
             </div>
           </section>
+
+          {errorFoto && <Aviso tono="error">{errorFoto}</Aviso>}
 
           {!perfil ? (
             <div className="grid place-items-center py-10">

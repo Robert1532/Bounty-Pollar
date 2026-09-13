@@ -7,6 +7,7 @@ import { firmarSesion, guardarCookieSesion } from '@/lib/session';
 import { leerJson, manejarError, ok, verificarOrigen } from '@/lib/http';
 import { ErrorApp } from '@/lib/errors';
 import { direccionStellar } from '@/lib/validaciones';
+import { usuarioDeSesion } from '@/lib/perfil';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const usuario = await registrarWallet({ direccion, nombre: datos.nombre });
 
     await guardarCookieSesion(await firmarSesion({ userId: usuario.id, direccion }));
-    return ok({ id: usuario.id, direccion, nombre: usuario.nombre });
+    return ok(usuarioDeSesion(usuario));
   } catch (error) {
     return manejarError(error);
   }

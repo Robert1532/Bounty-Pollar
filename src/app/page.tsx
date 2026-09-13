@@ -14,6 +14,7 @@ import { Icono, Isotipo, type NombreIcono } from '@/components/Marca';
 import { DialogoConfirmacion } from '@/components/ui/DialogoConfirmacion';
 import { PanelConfianza } from '@/components/PanelConfianza';
 import { ResumenDinero } from '@/components/ResumenDinero';
+import { AbrirTrato } from '@/components/AbrirTrato';
 
 type Pestana = 'vendo' | 'compro';
 
@@ -79,6 +80,8 @@ export default function Inicio() {
           ))}
         </div>
 
+        {pestana === 'compro' && <AbrirTrato />}
+
         {!tratos ? (
           <div className="grid place-items-center py-16">
             <Spinner />
@@ -89,7 +92,7 @@ export default function Inicio() {
             detalle={
               pestana === 'vendo'
                 ? 'Crea un trato y mándale el link a tu comprador por WhatsApp.'
-                : 'Cuando te pasen un link de Caserita y pagues, aparece acá.'
+                : 'Cuando abras un enlace y completes el pago, tu compra aparecerá acá.'
             }
           />
         ) : (

@@ -44,8 +44,8 @@ export function CodigoComprador({ tratoId }: { tratoId: string }) {
         </div>
       )}
       <p className="mx-auto max-w-md text-sm leading-relaxed text-tinta-2">
-        Muéstraselo al vendedor <span className="font-bold">solo cuando tengas el producto en la mano</span>.
-        Al ingresarlo, cobra.
+        Muéstraselo al vendedor <span className="font-bold">solo después de revisar que el producto esté correcto y en buen estado</span>.
+        Al ingresarlo, el pago se libera y ya no puede revertirse automáticamente.
       </p>
       </div>
     </section>

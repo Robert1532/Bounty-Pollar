@@ -38,7 +38,8 @@ export async function registrarWallet(params: { direccion: string; nombre?: stri
     .values({ id: nuevoId(), walletAddress: params.direccion, nombre: params.nombre ?? null })
     .onConflictDoUpdate({
       target: users.walletAddress,
-      set: { nombre: params.nombre ?? null, updatedAt: new Date() },
+      // Un reingreso sin perfil de Google no debe borrar un nombre existente.
+      set: params.nombre ? { nombre: params.nombre, updatedAt: new Date() } : { updatedAt: new Date() },
     })
     .returning();
 

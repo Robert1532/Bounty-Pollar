@@ -54,4 +54,6 @@ export async function api<T>(ruta: string, opciones: RequestInit = {}): Promise<
 export const get = <T,>(ruta: string) => api<T>(ruta);
 export const post = <T,>(ruta: string, cuerpo?: unknown) =>
   api<T>(ruta, { method: 'POST', body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+export const patch = <T,>(ruta: string, cuerpo: unknown) =>
+  api<T>(ruta, { method: 'PATCH', body: JSON.stringify(cuerpo) });
 export const del = <T,>(ruta: string) => api<T>(ruta, { method: 'DELETE' });

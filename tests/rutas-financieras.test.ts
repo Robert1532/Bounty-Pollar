@@ -8,6 +8,7 @@ const dobles = vi.hoisted(() => ({
   },
   confirmar: vi.fn(),
   devolver: vi.fn(),
+  reportar: vi.fn(),
   // La vista pública añade el historial del vendedor; acá se devuelve el trato
   // tal cual para que la prueba siga midiendo solo la ruta.
   vista: vi.fn(async (trato: unknown) => trato),
@@ -20,6 +21,7 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/tratos/service', () => ({
   confirmarDeposito: dobles.confirmar,
   devolver: dobles.devolver,
+  reportarProblema: dobles.reportar,
   vistaDeTrato: dobles.vista,
 }));
 
@@ -34,6 +36,7 @@ vi.mock('@/lib/rate-limit', () => ({
 
 import { POST as confirmar } from '@/app/api/tratos/[id]/confirmar/route';
 import { POST as devolver } from '@/app/api/tratos/[id]/devolver/route';
+import { POST as reportar } from '@/app/api/tratos/[id]/reportar/route';
 
 const contexto = { params: Promise.resolve({ id: 'trato123' }) };
 
@@ -42,6 +45,7 @@ describe('rutas financieras', () => {
     vi.clearAllMocks();
     dobles.confirmar.mockResolvedValue({ id: 'trato123', estado: 'FINANCIADO' });
     dobles.devolver.mockResolvedValue({ id: 'trato123', estado: 'DEVUELTO' });
+    dobles.reportar.mockResolvedValue({ id: 'trato123', estado: 'FINANCIADO', reportado: true });
   });
 
   it('pasa el hash a la verificación on-chain', async () => {
@@ -75,7 +79,7 @@ describe('rutas financieras', () => {
     expect(dobles.confirmar).not.toHaveBeenCalled();
   });
 
-  it('no permite restaurar la devolución anticipada desde el cliente', async () => {
+  it('envía la devolución acordada al servicio, que valida que el actor sea el vendedor', async () => {
     const respuesta = await devolver(
       new Request('http://localhost/api/tratos/trato123/devolver', {
         method: 'POST',
@@ -85,8 +89,44 @@ describe('rutas financieras', () => {
       contexto,
     );
 
+    expect(respuesta.status).toBe(200);
+    expect(dobles.devolver).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'trato123', motivo: 'ACORDADA', actor: dobles.usuario }),
+    );
+  });
+
+  it('registra un problema de entrega con un motivo limitado', async () => {
+    const respuesta = await reportar(
+      new Request('http://localhost/api/tratos/trato123/reportar', {
+        method: 'POST',
+        body: JSON.stringify({ motivo: 'PRODUCTO_DANADO', detalle: 'La pantalla llegó rota' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      contexto,
+    );
+
+    expect(respuesta.status).toBe(200);
+    expect(dobles.reportar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'trato123',
+        datos: { motivo: 'PRODUCTO_DANADO', detalle: 'La pantalla llegó rota' },
+        actor: dobles.usuario,
+      }),
+    );
+  });
+
+  it('rechaza motivos de reporte inventados', async () => {
+    const respuesta = await reportar(
+      new Request('http://localhost/api/tratos/trato123/reportar', {
+        method: 'POST',
+        body: JSON.stringify({ motivo: 'DEVOLVER_SIN_VALIDAR' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      contexto,
+    );
+
     expect(respuesta.status).toBe(400);
-    expect(dobles.devolver).not.toHaveBeenCalled();
+    expect(dobles.reportar).not.toHaveBeenCalled();
   });
 
   it('conserva el código y estado HTTP de los errores de dominio', async () => {

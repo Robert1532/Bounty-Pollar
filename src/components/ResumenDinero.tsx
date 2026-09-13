@@ -37,7 +37,7 @@ export function ResumenDinero() {
     get<Resumen>('/api/resumen')
       .then((d) => vivo && setResumen(d))
       .catch(() => undefined);
-    const reloj = setTimeout(() => vivo && setEsperandoSaldo(false), 6000);
+    const reloj = setTimeout(() => vivo && setEsperandoSaldo(false), 3000);
     return () => {
       vivo = false;
       clearTimeout(reloj);

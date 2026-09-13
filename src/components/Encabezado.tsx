@@ -6,6 +6,7 @@ import { useSesion } from '@/lib/cliente/sesion';
 import { Spinner } from './ui/Boton';
 import { Isotipo, Logotipo } from './Marca';
 import { DialogoConfirmacion } from './ui/DialogoConfirmacion';
+import { AvatarUsuario } from './AvatarUsuario';
 
 export function Encabezado() {
   const { usuario, salir, ocupado, cargando } = useSesion();
@@ -27,11 +28,17 @@ export function Encabezado() {
             <>
             <Link
               href="/perfil"
-              className="grid size-9 place-items-center rounded-full border border-borde bg-superficie text-xs font-black text-verde shadow-sm transition hover:border-verde/30"
+              className="flex min-h-11 items-center gap-2 rounded-2xl border border-borde bg-superficie p-1.5 pr-3 shadow-sm transition hover:-translate-y-0.5 hover:border-verde/30 hover:shadow-md"
               title="Tu perfil"
               aria-label="Tu perfil"
             >
-              {(usuario.nombre ?? 'C').slice(0, 1).toUpperCase()}
+              <AvatarUsuario nombre={usuario.nombre} url={usuario.avatarUrl} className="size-8 text-xs" />
+              <span className="min-w-0 text-left leading-tight">
+                <span className="block max-w-28 truncate text-xs font-extrabold text-tinta">
+                  {usuario.nombre || 'Mi cuenta'}
+                </span>
+                <span className="block text-[10px] font-semibold text-tinta-3">Ver perfil</span>
+              </span>
             </Link>
             <button
               onClick={() => setConfirmandoSalida(true)}

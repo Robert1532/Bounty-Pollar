@@ -25,6 +25,10 @@ export interface TratoPublico {
   txLiberacion: string | null;
   txDevolucion: string | null;
   motivoDevolucion: 'PLAZO_VENCIDO' | 'ACORDADA' | null;
+  reportado: boolean;
+  reporteMotivo: string | null;
+  reporteDetalle: string | null;
+  reportadoEn: string | null;
   codigoBloqueado: boolean;
   intentosRestantes: number;
   expiraEn: string;
@@ -89,6 +93,7 @@ export interface ResumenDinero {
 export interface Perfil {
   direccion: string;
   nombre: string | null;
+  avatarUrl: string | null;
   desde: string;
   reputacion: Reputacion;
   resumen: ResumenDinero;
@@ -118,4 +123,5 @@ export interface UsuarioSesion {
   id: string;
   direccion: string;
   nombre: string | null;
+  avatarUrl: string | null;
 }

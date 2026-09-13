@@ -16,6 +16,7 @@ import { Icono } from '@/components/Marca';
 import { ReputacionVendedor } from '@/components/ReputacionVendedor';
 import { VerEvidencia } from '@/components/EvidenciaEntrega';
 import { Calificar } from '@/components/Calificar';
+import { ProblemaPedido } from '@/components/ProblemaPedido';
 
 const ESTADOS_VIVOS = ['PUBLICADO', 'FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'];
 
@@ -148,9 +149,9 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
         {trato.estado === 'PUBLICADO' &&
           (esVendedor ? <CompartirTrato trato={trato} /> : <PagarTrato trato={trato} alActualizar={setTrato} />)}
 
-        {trato.estado === 'FINANCIADO' && esComprador && <CodigoComprador tratoId={trato.id} />}
+        {trato.estado === 'FINANCIADO' && esComprador && !trato.reportado && <CodigoComprador tratoId={trato.id} />}
 
-        {trato.estado === 'FINANCIADO' && esVendedor && (
+        {trato.estado === 'FINANCIADO' && esVendedor && !trato.reportado && (
           <section className="space-y-3">
             <Aviso tono="ok">
               El comprador ya pagó y la plata está en custodia. Entrega el producto y pídele su código.
@@ -160,6 +161,8 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
             </Link>
           </section>
         )}
+
+        <ProblemaPedido trato={trato} alActualizar={setTrato} />
 
         {trato.estado === 'FINANCIADO' && esComprador && plazoVencido && (
           <Boton
@@ -218,34 +221,43 @@ function fechaCorta(iso: string): string {
   });
 }
 
-/** El historial on-chain es el comprobante que hoy nadie tiene. */
+/** Comprobantes legibles primero; el hash técnico queda disponible sin dominar la pantalla. */
 function Comprobantes({ trato, red }: { trato: TratoPublico; red: 'testnet' | 'mainnet' }) {
   const base = red === 'mainnet' ? 'https://stellar.expert/explorer/public' : 'https://stellar.expert/explorer/testnet';
   const filas = [
-    ['Depósito del comprador', trato.txDeposito],
-    ['Liberación al vendedor', trato.txLiberacion],
-    ['Devolución al comprador', trato.txDevolucion],
-  ].filter(([, hash]) => Boolean(hash)) as [string, string][];
+    ['Pago recibido y protegido', 'El dinero entró a la custodia de Caserita.', trato.txDeposito],
+    ['Pago enviado al vendedor', 'El comprador aprobó la entrega con su código.', trato.txLiberacion],
+    ['Pago devuelto al comprador', 'El dinero regresó a la wallet que pagó.', trato.txDevolucion],
+  ].filter(([, , hash]) => Boolean(hash)) as [string, string, string][];
 
   if (filas.length === 0) return null;
 
   return (
-    <section className="tarjeta space-y-3 p-5">
+    <section className="tarjeta space-y-4 p-5">
       <div className="flex items-center gap-2">
         <span className="grid size-9 place-items-center rounded-xl bg-verde-claro text-verde"><Icono nombre="escudo" className="size-5" /></span>
-        <div><h2 className="font-extrabold">Comprobantes en la red</h2><p className="text-xs text-tinta-3">Transacciones verificables en Stellar</p></div>
+        <div><h2 className="font-extrabold">Comprobantes del pago</h2><p className="text-xs text-tinta-3">Confirman que el dinero se movió correctamente</p></div>
       </div>
-      {filas.map(([etiqueta, hash]) => (
-        <a
-          key={hash}
-          href={`${base}/tx/${hash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group flex items-center gap-3 rounded-2xl bg-papel-2 px-4 py-3 text-xs transition hover:bg-verde-claro/60"
-        >
-          <span className="min-w-0 flex-1"><span className="block font-bold text-tinta-2">{etiqueta}</span><span className="numeros block truncate text-tinta-3">{hash}</span></span>
-          <Icono nombre="externo" className="size-4 shrink-0 text-tinta-3 group-hover:text-verde" />
-        </a>
+      <p className="rounded-xl bg-verde-claro/50 px-3 py-2 text-xs leading-relaxed text-verde-oscuro">
+        No necesitas entender códigos técnicos. Cada comprobante se puede verificar públicamente en Stellar.
+      </p>
+      {filas.map(([etiqueta, detalle, hash]) => (
+        <div key={hash} className="rounded-2xl bg-papel-2 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-verde-claro text-verde"><Icono nombre="check" className="size-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-extrabold text-tinta">{etiqueta}</span>
+              <span className="block text-xs leading-relaxed text-tinta-3">{detalle}</span>
+            </span>
+            <a href={`${base}/tx/${hash}`} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-verde hover:underline">
+              Ver en Stellar <Icono nombre="externo" className="size-3.5" />
+            </a>
+          </div>
+          <details className="mt-2 pl-11 text-[11px] text-tinta-3">
+            <summary className="cursor-pointer select-none font-semibold">Ver código técnico</summary>
+            <p className="numeros mt-1 break-all">{hash}</p>
+          </details>
+        </div>
       ))}
     </section>
   );

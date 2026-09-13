@@ -22,6 +22,10 @@ export interface TratoPublico {
   txLiberacion: string | null;
   txDevolucion: string | null;
   motivoDevolucion: Trato['motivoDevolucion'];
+  reportado: boolean;
+  reporteMotivo: string | null;
+  reporteDetalle: string | null;
+  reportadoEn: string | null;
   codigoBloqueado: boolean;
   intentosRestantes: number;
   expiraEn: string;
@@ -55,6 +59,8 @@ export function aTratoPublico(
   vendedor?: User | null,
   calificado = false,
 ): TratoPublico {
+  const rol = rolDe(trato, usuario);
+  const esParte = rol === 'vendedor' || rol === 'comprador';
   return {
     id: trato.id,
     titulo: trato.titulo,
@@ -71,13 +77,17 @@ export function aTratoPublico(
     txLiberacion: trato.txLiberacion,
     txDevolucion: trato.txDevolucion,
     motivoDevolucion: trato.motivoDevolucion,
+    reportado: Boolean(trato.reportadoEn),
+    reporteMotivo: esParte ? trato.reporteMotivo : null,
+    reporteDetalle: esParte ? trato.reporteDetalle : null,
+    reportadoEn: esParte ? trato.reportadoEn?.toISOString() ?? null : null,
     codigoBloqueado: trato.codigoBloqueado,
     intentosRestantes: Math.max(0, MAX_INTENTOS - trato.codigoIntentos),
     expiraEn: trato.expiraEn.toISOString(),
     liberaHasta: trato.liberaHasta?.toISOString() ?? null,
     financiadoEn: trato.financiadoEn?.toISOString() ?? null,
     creadoEn: trato.createdAt.toISOString(),
-    rol: rolDe(trato, usuario),
+    rol,
     vendedor: vendedor ? reputacionDe(vendedor) : null,
     tieneEvidencia: Boolean(trato.evidenciaRuta),
     evidenciaSubidaEn: trato.evidenciaSubidaEn?.toISOString() ?? null,

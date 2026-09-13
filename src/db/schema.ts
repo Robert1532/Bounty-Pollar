@@ -49,6 +49,7 @@ export const tipoEvento = pgEnum('tipo_evento', [
   'WEBHOOK_RECIBIDO',
   'EVIDENCIA_ADJUNTADA',
   'CALIFICACION_RECIBIDA',
+  'PROBLEMA_REPORTADO',
 ]);
 
 export const motivoDevolucion = pgEnum('motivo_devolucion', ['PLAZO_VENCIDO', 'ACORDADA']);
@@ -64,6 +65,10 @@ export const users = pgTable('users', {
   pollarUserId: varchar('pollar_user_id', { length: 64 }),
   nombre: varchar('nombre', { length: 80 }),
   telefono: varchar('telefono', { length: 20 }),
+  /** Avatar privado en Supabase Storage. La API sirve los bytes al dueño. */
+  avatarRuta: varchar('avatar_ruta', { length: 200 }),
+  avatarTipo: varchar('avatar_tipo', { length: 40 }),
+  avatarActualizadoEn: timestamp('avatar_actualizado_en', { withTimezone: true }),
 
   /**
    * Reputación. No son estrellas ni reseñas: son hechos que ya ocurrieron
@@ -139,6 +144,11 @@ export const tratos = pgTable(
     txDevolucion: varchar('tx_devolucion', { length: 64 }).unique(),
 
     motivoDevolucion: motivoDevolucion('motivo_devolucion'),
+
+    /** Un reporte congela el uso del código mientras el dinero sigue en custodia. */
+    reporteMotivo: varchar('reporte_motivo', { length: 32 }),
+    reporteDetalle: varchar('reporte_detalle', { length: 500 }),
+    reportadoEn: timestamp('reportado_en', { withTimezone: true }),
 
     /**
      * Evidencia de entrega: una foto opcional que el vendedor adjunta al

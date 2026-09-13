@@ -49,7 +49,7 @@ export function Logotipo({ className = '' }: { className?: string }) {
   );
 }
 
-export type NombreIcono = 'escudo' | 'personas' | 'hoja' | 'enlace' | 'paquete' | 'codigo' | 'reloj' | 'check' | 'alerta' | 'info' | 'error' | 'flecha' | 'wallet' | 'ubicacion' | 'copiar' | 'whatsapp' | 'externo';
+export type NombreIcono = 'escudo' | 'personas' | 'hoja' | 'enlace' | 'paquete' | 'codigo' | 'reloj' | 'check' | 'alerta' | 'info' | 'error' | 'flecha' | 'wallet' | 'ubicacion' | 'copiar' | 'whatsapp' | 'externo' | 'camara';
 
 export function Icono({ nombre, ...props }: { nombre: NombreIcono } & SVGProps<SVGSVGElement>) {
   const comunes = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -72,6 +72,7 @@ export function Icono({ nombre, ...props }: { nombre: NombreIcono } & SVGProps<S
       {nombre === 'copiar' && <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>}
       {nombre === 'whatsapp' && <><path d="M20 11.5a8 8 0 0 1-11.8 7L4 20l1.4-4A8 8 0 1 1 20 11.5Z" /><path d="M9 8.5c.5 3 2 4.5 5 5" /></>}
       {nombre === 'externo' && <><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" /></>}
+      {nombre === 'camara' && <><path d="M4 8h3l1.5-2h7L17 8h3v11H4V8Z" /><circle cx="12" cy="13" r="3" /></>}
     </svg>
   );
 }

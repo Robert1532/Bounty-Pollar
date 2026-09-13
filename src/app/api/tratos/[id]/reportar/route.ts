@@ -2,16 +2,12 @@ import { NextResponse } from 'next/server';
 import { requerirUsuario } from '@/lib/auth';
 import { leerJson, manejarError, ok, verificarOrigen } from '@/lib/http';
 import { ipDe } from '@/lib/rate-limit';
-import { devolverSchema, idTrato } from '@/lib/validaciones';
-import { devolver, vistaDeTrato } from '@/lib/tratos/service';
+import { idTrato, reportarProblemaSchema } from '@/lib/validaciones';
+import { reportarProblema, vistaDeTrato } from '@/lib/tratos/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * Permite a una de las partes empujar una devolución cuando el plazo ya
- * venció. La misma regla temporal protege la ruta y el cron.
- */
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -20,12 +16,10 @@ export async function POST(
     verificarOrigen(req);
     const usuario = await requerirUsuario();
     const { id } = await ctx.params;
-    const tratoId = idTrato.parse(id);
-
-    const datos = await leerJson(req, devolverSchema);
-    const trato = await devolver({
-      id: tratoId,
-      motivo: datos.motivo ?? 'PLAZO_VENCIDO',
+    const datos = await leerJson(req, reportarProblemaSchema);
+    const trato = await reportarProblema({
+      id: idTrato.parse(id),
+      datos,
       actor: usuario,
       ip: ipDe(req),
     });

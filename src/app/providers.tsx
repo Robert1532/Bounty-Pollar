@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { PollarProvider, usePollar } from '@pollar/react';
 import { ContextoSesion, type EstadoSesion } from '@/lib/cliente/sesion';
 import type { ConfigPublica, TratoPublico, UsuarioSesion } from '@/lib/cliente/tipos';
-import { ErrorApi, del, get, post } from '@/lib/cliente/api';
+import { ErrorApi, del, get, patch, post } from '@/lib/cliente/api';
 
 const CLAVE_MOCK = 'caserita:wallet-demo';
 const ERROR_WALLET_NO_ACTIVA =
@@ -227,10 +227,13 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       if (prueba.status !== 'signed') {
         throw new Error('No pudimos verificar tu wallet. Intenta entrar de nuevo.');
       }
+      const perfilPollar = getClient().getUserProfile();
+      const nombre = [perfilPollar?.first_name, perfilPollar?.last_name].filter(Boolean).join(' ').trim();
       const usuario = await post<UsuarioSesion>('/api/auth/sesion', {
         mensaje,
         firma: prueba.signature,
         direccion: prueba.signerAddress,
+        ...(nombre ? { nombre } : {}),
       });
       base.setUsuario(usuario);
 
@@ -247,6 +250,17 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       .catch((e) => base.setError(mensajeDe(e)))
       .finally(() => base.setOcupado(false));
   }, [esperandoLogin, isAuthenticated, wallet?.address, abrirSesion, base]);
+
+  // Las sesiones restauradas por Pollar también recuperan el perfil de Google.
+  // Si la cuenta local todavía no tenía nombre, lo guardamos una sola vez.
+  useEffect(() => {
+    if (!verified || !base.usuario || base.usuario.nombre) return;
+    const perfil = getClient().getUserProfile();
+    const nombre = [perfil?.first_name, perfil?.last_name].filter(Boolean).join(' ').trim();
+    if (!nombre) return;
+    base.setUsuario({ ...base.usuario, nombre });
+    void patch<UsuarioSesion>('/api/perfil', { nombre }).catch(() => undefined);
+  }, [base, getClient, verified]);
 
   const entrar = useCallback(async () => {
     base.setError(null);
