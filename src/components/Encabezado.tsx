@@ -32,6 +32,15 @@ export function Encabezado() {
           {cargando ? (
             <Spinner />
           ) : usuario ? (
+            <>
+            <Link
+              href="/perfil"
+              className="grid size-9 place-items-center rounded-full border border-borde bg-superficie text-xs font-black text-verde shadow-sm transition hover:border-verde/30"
+              title="Tu perfil"
+              aria-label="Tu perfil"
+            >
+              {(usuario.nombre ?? 'C').slice(0, 1).toUpperCase()}
+            </Link>
             <button
               onClick={() => setConfirmandoSalida(true)}
               disabled={ocupado}
@@ -40,6 +49,7 @@ export function Encabezado() {
             >
               {ocupado ? <Spinner /> : 'Cerrar sesión'}
             </button>
+            </>
           ) : null}
         </div>
       </div>

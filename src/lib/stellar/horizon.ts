@@ -213,6 +213,47 @@ export async function tieneTrustlineUsdc(direccion: string): Promise<boolean> {
   }
 }
 
+/**
+ * Radiografía de la cuenta de custodia, para /api/salud.
+ *
+ * Existe porque un pago que falla con `txFeeBumpInnerFailed` no dice nada útil:
+ * el error de afuera solo cuenta que la transacción interna falló. Las tres
+ * causas reales —la cuenta no existe, no acepta USDC, o no hay XLM para los
+ * fees— se responden con una sola consulta a Horizon.
+ */
+export async function diagnosticoEscrow(): Promise<{
+  direccion: string;
+  existe: boolean;
+  aceptaUsdc: boolean;
+  saldoUsdc: string | null;
+  saldoXlm: string | null;
+}> {
+  const direccion = parEscrow().publicKey();
+  const usdc = assetUsdc();
+
+  try {
+    const cuenta = await horizon().loadAccount(direccion);
+    const balanceUsdc = cuenta.balances.find(
+      (b) =>
+        'asset_code' in b &&
+        b.asset_code === usdc.getCode() &&
+        'asset_issuer' in b &&
+        b.asset_issuer === usdc.getIssuer(),
+    );
+    const balanceXlm = cuenta.balances.find((b) => b.asset_type === 'native');
+
+    return {
+      direccion,
+      existe: true,
+      aceptaUsdc: Boolean(balanceUsdc),
+      saldoUsdc: balanceUsdc?.balance ?? null,
+      saldoXlm: balanceXlm?.balance ?? null,
+    };
+  } catch {
+    return { direccion, existe: false, aceptaUsdc: false, saldoUsdc: null, saldoXlm: null };
+  }
+}
+
 export async function saldoEscrow(): Promise<{ usdc: string; xlm: string }> {
   const usdc = assetUsdc();
   const cuenta = await horizon().loadAccount(parEscrow().publicKey());

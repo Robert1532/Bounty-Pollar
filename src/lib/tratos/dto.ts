@@ -2,6 +2,7 @@ import type { Trato, User } from '@/db';
 import { normalizarMonto } from '../money';
 import { MAX_INTENTOS } from '../codigo';
 import { reputacionDe, type Reputacion } from './reputacion';
+import { puedeCalificar } from './calificaciones';
 
 export type RolEnTrato = 'vendedor' | 'comprador' | 'visitante';
 
@@ -36,6 +37,11 @@ export interface TratoPublico {
   tieneEvidencia: boolean;
   evidenciaSubidaEn: string | null;
   evidenciaHash: string | null;
+
+  /** El comprador puede calificar (entrega completada y todavía sin calificar). */
+  puedeCalificar: boolean;
+  /** Si este trato ya tiene su calificación. Nunca se dice cuál ni de quién. */
+  calificado: boolean;
 }
 
 /**
@@ -43,7 +49,12 @@ export interface TratoPublico {
  * aparecen en ninguna vista: el codigo viaja solo por su propio endpoint, y
  * solo al comprador.
  */
-export function aTratoPublico(trato: Trato, usuario?: User | null, vendedor?: User | null): TratoPublico {
+export function aTratoPublico(
+  trato: Trato,
+  usuario?: User | null,
+  vendedor?: User | null,
+  calificado = false,
+): TratoPublico {
   return {
     id: trato.id,
     titulo: trato.titulo,
@@ -71,6 +82,8 @@ export function aTratoPublico(trato: Trato, usuario?: User | null, vendedor?: Us
     tieneEvidencia: Boolean(trato.evidenciaRuta),
     evidenciaSubidaEn: trato.evidenciaSubidaEn?.toISOString() ?? null,
     evidenciaHash: trato.evidenciaHash,
+    puedeCalificar: !calificado && puedeCalificar(trato, usuario),
+    calificado,
   };
 }
 

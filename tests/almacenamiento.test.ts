@@ -70,3 +70,58 @@ describe('huella de la evidencia', () => {
     expect(hashDe(alterada)).not.toBe(hashDe(JPEG));
   });
 });
+
+describe('URL firmada de Supabase', () => {
+  /**
+   * La API de firma devuelve ese campo en tres formas según la versión.
+   * Concatenar a ciegas produce una URL duplicada que el navegador muestra como
+   * imagen rota, sin ningún error en el servidor que lo explique.
+   */
+  it('respeta una URL que ya viene completa', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    const completa = 'https://proyecto.supabase.co/storage/v1/object/sign/evidencias/a.jpg?token=xyz';
+    expect(armarUrlFirmada('https://proyecto.supabase.co', completa)).toBe(completa);
+  });
+
+  it('arma la URL cuando llega una ruta con barra inicial', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    expect(armarUrlFirmada('https://p.supabase.co', '/object/sign/evidencias/a.jpg?token=xyz')).toBe(
+      'https://p.supabase.co/storage/v1/object/sign/evidencias/a.jpg?token=xyz',
+    );
+  });
+
+  it('arma la URL cuando llega sin barra inicial', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    expect(armarUrlFirmada('https://p.supabase.co', 'object/sign/evidencias/a.jpg?token=xyz')).toBe(
+      'https://p.supabase.co/storage/v1/object/sign/evidencias/a.jpg?token=xyz',
+    );
+  });
+
+  it('no duplica el prefijo storage/v1 si la ruta ya lo trae', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    expect(armarUrlFirmada('https://p.supabase.co', '/storage/v1/object/sign/e/a.jpg')).toBe(
+      'https://p.supabase.co/storage/v1/object/sign/e/a.jpg',
+    );
+  });
+
+  it('tolera una barra de más en SUPABASE_URL', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    expect(armarUrlFirmada('https://p.supabase.co/', '/object/sign/e/a.jpg')).toBe(
+      'https://p.supabase.co/storage/v1/object/sign/e/a.jpg',
+    );
+  });
+
+  it('nunca produce una URL con el origen repetido', async () => {
+    const { armarUrlFirmada } = await import('@/lib/almacenamiento');
+    for (const firmada of [
+      'https://p.supabase.co/storage/v1/object/sign/e/a.jpg',
+      '/object/sign/e/a.jpg',
+      'object/sign/e/a.jpg',
+      '/storage/v1/object/sign/e/a.jpg',
+    ]) {
+      const url = armarUrlFirmada('https://p.supabase.co', firmada);
+      expect(url.match(/https?:\/\//g)).toHaveLength(1);
+      expect(url.match(/storage\/v1/g)).toHaveLength(1);
+    }
+  });
+});

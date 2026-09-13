@@ -9,6 +9,8 @@ function usuario(parcial: Partial<Parameters<typeof reputacionDe>[0]> = {}) {
     devolucionesComoComprador: 0,
     volumenVendidoUsdc: '0',
     primerTratoEn: null,
+    calificacionesRecibidas: 0,
+    sumaEstrellas: 0,
     ...parcial,
   };
 }
@@ -54,6 +56,15 @@ describe('reputación', () => {
   it('normaliza el volumen al formato de Stellar', () => {
     expect(reputacionDe(usuario({ volumenVendidoUsdc: '12.5' })).volumenVendidoUsdc).toBe('12.5000000');
     expect(reputacionDe(usuario({ volumenVendidoUsdc: '0' })).volumenVendidoUsdc).toBe('0.0000000');
+  });
+
+  it('las estrellas viajan con la reputación', () => {
+    expect(reputacionDe(usuario()).estrellas.cantidad).toBe(0);
+    expect(reputacionDe(usuario()).estrellas.promedio).toBeNull();
+
+    const conEstrellas = reputacionDe(usuario({ calificacionesRecibidas: 4, sumaEstrellas: 18 }));
+    expect(conEstrellas.estrellas.promedio).toBe(4.5);
+    expect(conEstrellas.estrellas.cantidad).toBe(4);
   });
 
   it('expone la fecha del primer trato en ISO', () => {

@@ -1,5 +1,6 @@
 import type { Reputacion } from '@/lib/cliente/tipos';
 import { Icono } from './Marca';
+import { Estrellas } from './Estrellas';
 
 /**
  * El historial del vendedor, en la página pública del trato.
@@ -38,6 +39,9 @@ export function ReputacionVendedor({ reputacion }: { reputacion: Reputacion }) {
               {estilo.etiqueta}
             </span>
           </div>
+          <div className="mt-1">
+            <Estrellas datos={reputacion.estrellas} tamano="chico" />
+          </div>
           {reputacion.primerTratoEn && (
             <p className="mt-0.5 text-xs text-tinta-3">En Caserita desde {mes(reputacion.primerTratoEn)}</p>
           )}
@@ -46,7 +50,7 @@ export function ReputacionVendedor({ reputacion }: { reputacion: Reputacion }) {
 
       {sinHistorial ? (
         <p className="mt-4 rounded-2xl bg-papel-2 px-4 py-3 text-sm leading-relaxed text-tinta-2">
-          Es su primer trato acá, así que todavía no tiene historial.{' '}
+          Es su primer trato acá, así que todavía no tiene historial ni calificaciones.{' '}
           <strong className="text-tinta">Igual tu plata está protegida:</strong> queda en custodia hasta que
           entregue, y si no entrega vuelve sola.
         </p>

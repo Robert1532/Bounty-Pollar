@@ -13,6 +13,7 @@ import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono, Isotipo, type NombreIcono } from '@/components/Marca';
 import { DialogoConfirmacion } from '@/components/ui/DialogoConfirmacion';
 import { PanelConfianza } from '@/components/PanelConfianza';
+import { ResumenDinero } from '@/components/ResumenDinero';
 
 type Pestana = 'vendo' | 'compro';
 
@@ -58,6 +59,8 @@ export default function Inicio() {
           <p className="text-xs font-black tracking-[0.12em] text-verde uppercase">Mis transacciones</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight">Compra y vende con tranquilidad</h1>
         </div>
+
+        <ResumenDinero />
 
         <div className="flex rounded-2xl border border-borde bg-papel-2/80 p-1 text-sm font-bold">
           {(['vendo', 'compro'] as const).map((p) => (

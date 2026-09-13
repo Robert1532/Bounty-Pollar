@@ -68,6 +68,45 @@ function mensajeDe(e: unknown): string {
   return 'Algo salió mal. Intenta de nuevo.';
 }
 
+/**
+ * Traduce el resultado de una transacción rechazada por Stellar.
+ *
+ * `txFeeBumpInnerFailed` es el código de la transacción *envolvente*: Pollar
+ * patrocina el fee con un fee-bump, así que cuando la transacción interna falla
+ * eso es lo único que llega. La causa real está en los códigos de operación, y
+ * casi siempre es una de tres: no hay USDC, la wallet no acepta USDC todavía, o
+ * la cuenta ni siquiera existe en la red.
+ */
+function mensajeDeCadena(resultado: {
+  resultCode?: string;
+  details?: string;
+  message?: string;
+  code?: string;
+}): string {
+  const texto = [resultado.resultCode, resultado.details, resultado.message, resultado.code]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (texto.includes('op_underfunded') || texto.includes('insufficient')) {
+    return 'No tienes suficiente USDC en tu wallet para este trato.';
+  }
+  if (texto.includes('op_no_trust') || texto.includes('no_trust')) {
+    return 'Tu wallet todavía no acepta USDC. Vuelve a entrar para que Pollar active el activo y reintenta.';
+  }
+  if (texto.includes('op_no_destination') || texto.includes('no_destination')) {
+    return 'La cuenta de custodia no está activa en esta red. Avísanos: es un problema de configuración, no tuyo.';
+  }
+  if (texto.includes('tx_bad_auth') || texto.includes('bad_auth')) {
+    return 'Tu wallet no pudo firmar el pago. Cierra sesión, vuelve a entrar e intenta otra vez.';
+  }
+  if (texto.includes('feebumpinnerfailed') || texto.includes('tx_failed')) {
+    // El envolvente sin más pistas: lo más común es saldo insuficiente.
+    return 'La red rechazó el pago. Lo más probable es que te falte USDC en la wallet; revisa tu saldo y reintenta.';
+  }
+  return resultado.message ?? resultado.details ?? 'La red rechazó el pago.';
+}
+
 /** El SDK devuelve algunos mensajes internos en inglés; nunca se muestran tal cual al usuario. */
 function mensajePollar(mensaje?: string): string {
   const texto = mensaje?.trim() ?? '';
@@ -98,6 +137,8 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
     getClient,
     runTx,
     openTxHistoryModal,
+    walletBalance,
+    refreshWalletBalance,
   } = usePollar();
   const [esperandoLogin, setEsperandoLogin] = useState(false);
   const trustlineIntentada = useRef<string | null>(null);
@@ -244,6 +285,21 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
    * El pago del comprador: un `payment` de USDC a la cuenta de custodia con el
    * memo del trato. Pollar patrocina el fee, asi que el comprador nunca ve XLM.
    */
+  /**
+   * Saldo USDC del usuario, leído del estado de Pollar.
+   *
+   * Sirve para avisar antes de firmar. Sin esto, una wallet sin USDC falla con
+   * `txFeeBumpInnerFailed`, que no le dice nada a nadie: es el error de la
+   * transacción envolvente, y la causa real queda escondida en la interna.
+   */
+  const saldoUsdc = useMemo(() => {
+    const asset = base.config?.asset;
+    if (!asset || walletBalance.step !== 'loaded') return null;
+    const fila = walletBalance.data.balances.find((b) => b.code === asset.code);
+    if (!fila) return '0';
+    return fila.available ?? fila.balance ?? '0';
+  }, [base.config?.asset, walletBalance]);
+
   const pagar = useCallback(
     async (trato: TratoPublico) => {
       const asset = base.config?.asset;
@@ -260,12 +316,19 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       );
 
       if (resultado.status === 'error') {
-        throw new Error(resultado.message ?? resultado.details ?? 'La red rechazó el pago.');
+        throw new Error(mensajeDeCadena(resultado));
       }
+
+      // El saldo cambió: que la próxima comprobación previa no use el viejo.
+      void refreshWalletBalance().catch(() => undefined);
       return resultado.hash;
     },
-    [base.config, runTx],
+    [base.config, refreshWalletBalance, runTx],
   );
+
+  const refrescarSaldo = useCallback(async () => {
+    await refreshWalletBalance().catch(() => undefined);
+  }, [refreshWalletBalance]);
 
   const valor: EstadoSesion = useMemo(
     () => ({
@@ -279,9 +342,11 @@ function ProveedorPollar({ children }: { children: ReactNode }) {
       salir,
       pagar,
       abrirHistorial: openTxHistoryModal,
+      saldoUsdc,
+      refrescarSaldo,
       refrescar: base.refrescar,
     }),
-    [base, entrar, esperandoLogin, openTxHistoryModal, pagar, salir],
+    [base, entrar, esperandoLogin, openTxHistoryModal, pagar, refrescarSaldo, saldoUsdc, salir],
   );
 
   return <ContextoSesion.Provider value={valor}>{children}</ContextoSesion.Provider>;
@@ -346,6 +411,8 @@ function ProveedorMock({ children }: { children: ReactNode }) {
       salir,
       pagar,
       abrirHistorial: null,
+      saldoUsdc: null,
+      refrescarSaldo: async () => undefined,
       refrescar: base.refrescar,
     }),
     [base, entrar, pagar, salir],

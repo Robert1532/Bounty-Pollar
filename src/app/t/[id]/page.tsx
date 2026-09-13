@@ -9,12 +9,13 @@ import { PagarTrato } from '@/components/PagarTrato';
 import { CodigoComprador } from '@/components/CodigoComprador';
 import { Aviso } from '@/components/ui/Aviso';
 import { Boton, Spinner, claseBoton } from '@/components/ui/Boton';
-import { ErrorApi, get, post } from '@/lib/cliente/api';
+import { get, post } from '@/lib/cliente/api';
 import { useSesion } from '@/lib/cliente/sesion';
 import type { TratoPublico } from '@/lib/cliente/tipos';
 import { Icono } from '@/components/Marca';
 import { ReputacionVendedor } from '@/components/ReputacionVendedor';
 import { VerEvidencia } from '@/components/EvidenciaEntrega';
+import { Calificar } from '@/components/Calificar';
 
 const ESTADOS_VIVOS = ['PUBLICADO', 'FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO'];
 
@@ -38,24 +39,26 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
     void cargar();
   }, [cargar, usuario?.id]);
 
-  // En PUBLICADO el sondeo vuelve a consultar Horizon, no solo la base. Esto
-  // recupera pagos que se confirmaron después de cerrar o refrescar la página.
+  /**
+   * Sondeo del estado.
+   *
+   * Solo lee: `GET /api/tratos/[id]`. Antes esto llamaba a `/confirmar` en cada
+   * vuelta para atrapar pagos hechos en otra pestaña, y el efecto secundario era
+   * feo — una petición de verificación contra Horizon cada 6 segundos por cada
+   * pestaña abierta, y un log lleno de errores para algo que todavía no había
+   * pasado.
+   *
+   * Confirmar es una acción, no una consulta, y tiene tres disparadores
+   * legítimos, todos puntuales: el comprador termina de pagar, el comprador
+   * vuelve a una pestaña donde había pagado (lo maneja `PagarTrato`), o el cron
+   * de vencimientos barre los tratos pendientes en el servidor. Ninguno necesita
+   * un temporizador en el navegador.
+   */
   useEffect(() => {
     if (!trato || !ESTADOS_VIVOS.includes(trato.estado)) return;
-    const revisar = async () => {
-      if (trato.estado === 'PUBLICADO' && usuario) {
-        try {
-          setTrato(await post<TratoPublico>(`/api/tratos/${trato.id}/confirmar`, {}));
-          return;
-        } catch (e) {
-          if (!(e instanceof ErrorApi) || e.codigo !== 'DEPOSITO_NO_ENCONTRADO') return;
-        }
-      }
-      await cargar();
-    };
-    const t = setInterval(() => void revisar(), 6000);
+    const t = setInterval(() => void cargar(), 6000);
     return () => clearInterval(t);
-  }, [trato, cargar, usuario]);
+  }, [trato, cargar]);
 
   if (error) {
     return (
@@ -191,6 +194,10 @@ export default function PaginaTrato({ params }: { params: Promise<{ id: string }
                 : 'La plata volvió al comprador.'}
           </Aviso>
         )}
+
+        {/* Calificar va después del aviso de "listo": primero se entera de que
+            cobró/recibió, después se le pide la opinión. */}
+        <Calificar trato={trato} alCalificar={() => void cargar()} />
 
         <VerEvidencia trato={trato} />
 

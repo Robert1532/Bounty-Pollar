@@ -145,7 +145,7 @@ Lo que el jurado va a mirar, y dónde está:
 | El código solo lo ve el **comprador autenticado**, por un endpoint aparte, sin caché y con rate limit. Nunca viaja en la vista del trato. | `src/app/api/tratos/[id]/codigo/route.ts` |
 | **Toda transición es idempotente** y usa `UPDATE … WHERE estado = <esperado>`: dos toques al botón no pagan dos veces. | `src/lib/tratos/service.ts` |
 | El hash de la transacción se **registra antes de enviarla**: si el envío se corta por timeout, se puede averiguar si entró en vez de pagar de nuevo. | `src/lib/stellar/horizon.ts` → `enviarDesdeEscrow()` |
-| **Log de auditoría** de todo: creación, depósito, intentos fallidos, bloqueos, liberaciones, devoluciones y evidencia adjuntada. | tabla `eventos`, `src/lib/eventos.ts` |
+| **Log de auditoría** de todo: creación, depósito, intentos fallidos, bloqueos, liberaciones, devoluciones y evidencia adjuntada. El evento de calificación no guarda actor, para no romper el anonimato por la puerta de atrás. | tabla `eventos`, `src/lib/eventos.ts` |
 | La **foto de entrega** se valida por firma binaria, no por `Content-Type`; vive en un bucket privado y se sirve con URLs firmadas de 5 minutos solo a las partes. | `src/lib/almacenamiento.ts` |
 | La **service role key** de Supabase es de servidor. Nunca lleva prefijo `NEXT_PUBLIC_`. | `src/lib/env.ts` |
 | Las **claves secretas** (Pollar y la custodia) viven solo en rutas de servidor. La validación de entorno falla al arrancar si falta alguna. | `src/lib/env.ts` |
@@ -179,10 +179,27 @@ Después de cada trato cerrado, las dos partes suman al historial: el vendedor
 una entrega cumplida y el monto cobrado, el comprador una compra completada. Una
 devolución por plazo vencido cuenta en contra del vendedor, y también se muestra.
 
-**No hay estrellas ni reseñas a propósito.** Las reseñas se compran; estos
-números no se pueden inflar sin mover dinero de verdad por la red. El vendedor
-llega a `Vendedor con historial` con 1 entrega, a `confiable` con 5 y a
-`recomendado` con 10.
+El vendedor llega a `Vendedor con historial` con 1 entrega, a `confiable` con 5
+y a `recomendado` con 10.
+
+### Calificación anónima
+
+Después de recibir, el comprador califica al vendedor de 1 a 5 estrellas. Tres
+decisiones que sostienen que esto signifique algo:
+
+1. **Solo califica quien compró y recibió.** Hace falta un trato `LIBERADO`, o
+   sea dinero real y una entrega confirmada con el código. No hay reseñas de
+   relleno porque cada estrella costó una compra.
+2. **Es anónima en el esquema, no en una promesa.** La tabla `calificaciones`
+   **no tiene `comprador_id`**: el permiso se valida contra `tratos.comprador_id`
+   al escribir y ahí termina. Ni el vendedor ni nadie leyendo la base puede
+   saber quién puso qué. El evento de auditoría tampoco guarda actor.
+3. **El promedio se oculta hasta tener 3.** Con una sola calificación el
+   vendedor sabría exactamente de quién vino y qué dijo: el anonimato se rompe
+   solo. Hasta entonces se muestra cuántas lleva, no la nota.
+
+Un `UNIQUE` sobre `trato_id` y un `CHECK` de rango 1–5 lo hacen cumplir la base,
+no solo el código.
 
 El comprador ve esto en la página del trato **antes** del botón de pagar, que es
 cuando se hace la pregunta. Un vendedor sin historial se muestra como tal, sin
@@ -360,10 +377,11 @@ render en servidor, no un error. No rompe nada.
 Hay dos caminos y no se mezclan:
 
 - **Con Drizzle** (recomendado si tienes la conexión directa): `npm run db:migrate`
-  aplica `drizzle/0000_inicial.sql` y `drizzle/0001_reputacion-evidencia.sql`.
-- **Desde el SQL Editor de Supabase**: corre `supabase/schema.sql` y después
-  `supabase/002_reputacion_y_evidencia.sql`. Cada uno se ejecuta **una vez**, en
-  ese orden; el segundo es idempotente y además registra las migraciones en
+  aplica las tres migraciones de `drizzle/`.
+- **Desde el SQL Editor de Supabase**: corre `supabase/schema.sql`, después
+  `supabase/002_reputacion_y_evidencia.sql` y después
+  `supabase/003_calificaciones.sql`. Cada uno se ejecuta **una vez**, en ese
+  orden; el segundo es idempotente y además registra las migraciones en
   `drizzle.__drizzle_migrations`, para que `db:migrate` no intente repetirlas
   sobre una base que ya las tiene.
 

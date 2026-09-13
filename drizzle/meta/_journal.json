@@ -15,6 +15,13 @@
       "when": 1789265894267,
       "tag": "0001_reputacion-evidencia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789277097820,
+      "tag": "0002_calificaciones",
+      "breakpoints": true
     }
   ]
 }

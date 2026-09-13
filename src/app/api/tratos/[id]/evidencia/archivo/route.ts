@@ -3,19 +3,23 @@ import { requerirUsuario } from '@/lib/auth';
 import { manejarError } from '@/lib/http';
 import { errores } from '@/lib/errors';
 import { idTrato } from '@/lib/validaciones';
-import { leerEvidenciaLocal } from '@/lib/almacenamiento';
+import { descargarEvidencia } from '@/lib/almacenamiento';
 import { obtenerTrato } from '@/lib/tratos/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 /**
- * Sirve la foto en modo demo, cuando no hay Supabase Storage detrás.
+ * Sirve la foto de la entrega por el camino propio.
  *
- * Con Supabase configurado esta ruta no se usa: ahí la foto se sirve con una
- * URL firmada que caduca a los 5 minutos, sin pasar por la app. Acá la
- * protección es la misma comprobación de siempre — tiene que ser una de las dos
- * partes del trato.
+ * Es el respaldo de la URL firmada de Supabase: si firmar falla o tarda
+ * demasiado, la foto igual se ve. La protección es la misma comprobación de
+ * siempre —tiene que ser una de las dos partes del trato— así que pasar por
+ * acá no afloja nada; solo gasta ancho de banda de la app en vez de servirla
+ * directo desde Storage.
+ *
+ * En modo demo, este es el único camino.
  */
 export async function GET(
   _req: Request,
@@ -31,14 +35,15 @@ export async function GET(
     }
     if (!trato.evidenciaRuta) throw errores.noEncontrado('Este trato no tiene foto de entrega.');
 
-    const archivo = leerEvidenciaLocal(trato.evidenciaRuta);
+    const archivo = await descargarEvidencia(trato.evidenciaRuta);
     if (!archivo) throw errores.noEncontrado('La foto ya no está disponible.');
 
     return new NextResponse(Buffer.from(archivo.datos) as unknown as BodyInit, {
       headers: {
-        'Content-Type': archivo.tipo,
+        'Content-Type': trato.evidenciaTipo ?? archivo.tipo,
         'Content-Length': String(archivo.datos.byteLength),
-        'Cache-Control': 'no-store, private',
+        // Privada y de corta vida: la foto no se queda en ninguna caché compartida.
+        'Cache-Control': 'private, max-age=60',
         'Content-Disposition': 'inline',
         'X-Content-Type-Options': 'nosniff',
       },

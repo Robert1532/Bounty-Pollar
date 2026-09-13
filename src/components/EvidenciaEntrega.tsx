@@ -148,6 +148,11 @@ export function VerEvidencia({ trato }: { trato: TratoPublico }) {
   const [evidencia, setEvidencia] = useState<Evidencia | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [abierta, setAbierta] = useState(false);
+  // Tercera línea de defensa: si la imagen no carga (URL firmada vencida, red
+  // caprichosa), se reintenta por la ruta propia antes de dar por perdida la
+  // foto. Un ícono de imagen rota no le dice nada a nadie.
+  const [usandoRespaldo, setUsandoRespaldo] = useState(false);
+  const respaldo = `/api/tratos/${trato.id}/evidencia/archivo`;
 
   useEffect(() => {
     if (!abierta || evidencia) return;
@@ -192,9 +197,13 @@ export function VerEvidencia({ trato }: { trato: TratoPublico }) {
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={evidencia.url}
+                src={usandoRespaldo ? respaldo : evidencia.url}
                 alt="Foto de la entrega"
-                className="w-full rounded-2xl border border-borde"
+                className="w-full rounded-2xl border border-borde bg-papel-2"
+                onError={() => {
+                  if (!usandoRespaldo) setUsandoRespaldo(true);
+                  else setError('No pudimos cargar la foto. Vuelve a intentar en un momento.');
+                }}
               />
               <p className="numeros mt-2 truncate text-[10px] text-tinta-3" title={evidencia.hash}>
                 SHA-256 {evidencia.hash}

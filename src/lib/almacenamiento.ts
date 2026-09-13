@@ -23,6 +23,13 @@ export type TipoImagen = (typeof TIPOS_PERMITIDOS)[number];
 
 export const MAX_BYTES_EVIDENCIA = 5 * 1024 * 1024;
 const SEGUNDOS_URL_FIRMADA = 300;
+/**
+ * Tiempos generosos a propósito: con un proyecto de Supabase en otra región, o
+ * recién despertando de un plan gratuito, diez segundos se quedan cortos y el
+ * usuario ve un error donde en realidad solo había que esperar.
+ */
+const TIMEOUT_FIRMA_MS = 20_000;
+const TIMEOUT_DESCARGA_MS = 30_000;
 
 /** Firmas binarias. El navegador puede mentir en la cabecera; los bytes no. */
 export function detectarTipoImagen(datos: Uint8Array): TipoImagen | null {
@@ -95,36 +102,99 @@ export async function guardarEvidencia(params: {
 }
 
 /**
- * URL para mostrar la foto. Con Supabase es una URL firmada de 5 minutos; en
- * modo demo, una ruta propia que vuelve a comprobar la sesión. En los dos casos
- * caduca o está autenticada: la foto nunca queda colgada en internet.
+ * Une el origen de Supabase con lo que devuelve la API de firma.
+ *
+ * Ese campo llega en tres formas distintas según la versión: una URL completa,
+ * una ruta con barra inicial, o una ruta sin barra. Concatenar a ciegas produce
+ * cosas como `https://x.supabase.co/storage/v1https://x.supabase.co/...`, que el
+ * navegador muestra como imagen rota sin decir por qué.
+ */
+export function armarUrlFirmada(origen: string, firmada: string): string {
+  if (/^https?:\/\//i.test(firmada)) return firmada;
+
+  const base = origen.replace(/\/+$/, '');
+  const ruta = firmada.replace(/^\/+/, '');
+  // La API puede devolver la ruta con o sin el prefijo `storage/v1`.
+  return ruta.startsWith('storage/v1/') ? `${base}/${ruta}` : `${base}/storage/v1/${ruta}`;
+}
+
+/**
+ * URL para mostrar la foto.
+ *
+ * Con Supabase se pide una URL firmada que caduca a los 5 minutos. Si la firma
+ * falla o tarda demasiado, NO se rompe la pantalla: se devuelve la ruta propia,
+ * que sirve los mismos bytes comprobando la sesión. Una foto de entrega es una
+ * ayuda, no una pieza crítica — que un timeout de Supabase tire un 500 en la
+ * página del trato es peor que servirla por el camino lento.
  */
 export async function urlDeEvidencia(params: { tratoId: string; ruta: string }): Promise<string> {
-  if (!usaSupabase()) return `/api/tratos/${params.tratoId}/evidencia/archivo`;
+  const respaldo = `/api/tratos/${params.tratoId}/evidencia/archivo`;
+  if (!usaSupabase()) return respaldo;
 
   const env = serverEnv();
-  const respuesta = await fetch(
-    `${env.SUPABASE_URL}/storage/v1/object/sign/${env.SUPABASE_BUCKET_EVIDENCIAS}/${params.ruta}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
+  try {
+    const respuesta = await fetch(
+      `${env.SUPABASE_URL}/storage/v1/object/sign/${env.SUPABASE_BUCKET_EVIDENCIAS}/${params.ruta}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ expiresIn: SEGUNDOS_URL_FIRMADA }),
+        signal: AbortSignal.timeout(TIMEOUT_FIRMA_MS),
       },
-      body: JSON.stringify({ expiresIn: SEGUNDOS_URL_FIRMADA }),
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
+    );
 
-  if (!respuesta.ok) {
-    log.error('Supabase no firmó la URL de la evidencia', { status: respuesta.status });
-    throw errores.cadena('No pudimos abrir la foto de la entrega.');
+    if (!respuesta.ok) {
+      log.warn('Supabase no firmó la URL; se sirve por la ruta propia', { status: respuesta.status });
+      return respaldo;
+    }
+
+    const cuerpo = (await respuesta.json()) as { signedURL?: string; signedUrl?: string };
+    const firmada = cuerpo.signedURL ?? cuerpo.signedUrl;
+    if (!firmada) return respaldo;
+
+    return armarUrlFirmada(env.SUPABASE_URL as string, firmada);
+  } catch (error) {
+    log.warn('no se pudo firmar la URL de la evidencia; se sirve por la ruta propia', { error });
+    return respaldo;
+  }
+}
+
+/**
+ * Descarga los bytes de la foto desde Supabase, para servirlos por la ruta
+ * propia cuando la URL firmada no está disponible.
+ */
+export async function descargarEvidencia(
+  ruta: string,
+): Promise<{ datos: Uint8Array; tipo: string } | null> {
+  if (!usaSupabase()) {
+    const local = leerEvidenciaLocal(ruta);
+    return local ? { datos: local.datos, tipo: local.tipo } : null;
   }
 
-  const cuerpo = (await respuesta.json()) as { signedURL?: string; signedUrl?: string };
-  const firmada = cuerpo.signedURL ?? cuerpo.signedUrl;
-  if (!firmada) throw errores.cadena('No pudimos abrir la foto de la entrega.');
-  return `${env.SUPABASE_URL}/storage/v1${firmada.startsWith('/') ? '' : '/'}${firmada}`;
+  const env = serverEnv();
+  try {
+    const respuesta = await fetch(
+      `${env.SUPABASE_URL}/storage/v1/object/${env.SUPABASE_BUCKET_EVIDENCIAS}/${ruta}`,
+      {
+        headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` },
+        signal: AbortSignal.timeout(TIMEOUT_DESCARGA_MS),
+      },
+    );
+    if (!respuesta.ok) {
+      log.error('Supabase no devolvió la evidencia', { status: respuesta.status });
+      return null;
+    }
+    return {
+      datos: new Uint8Array(await respuesta.arrayBuffer()),
+      tipo: respuesta.headers.get('content-type') ?? 'image/jpeg',
+    };
+  } catch (error) {
+    log.error('no se pudo descargar la evidencia', { error });
+    return null;
+  }
 }
 
 /** Solo para el modo demo: sirve los bytes desde la ruta autenticada. */

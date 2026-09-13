@@ -2,6 +2,7 @@ import { eq, sql as sqlRaw } from 'drizzle-orm';
 import { db, tratos, users, type Trato, type User } from '@/db';
 import { log } from '../logger';
 import { normalizarMonto } from '../money';
+import { estrellasDe, type Estrellas } from './calificaciones';
 
 /**
  * Reputación.
@@ -28,6 +29,8 @@ export interface Reputacion {
   nivel: NivelVendedor;
   /** Porcentaje de ventas que terminaron entregadas. `null` sin historial. */
   tasaEntrega: number | null;
+  /** Estrellas de compradores anónimos. El promedio se oculta si son pocas. */
+  estrellas: Estrellas;
 }
 
 const UMBRALES: [NivelVendedor, number][] = [
@@ -57,6 +60,8 @@ export function reputacionDe(usuario: {
   devolucionesComoComprador: number;
   volumenVendidoUsdc: string;
   primerTratoEn: Date | null;
+  calificacionesRecibidas: number;
+  sumaEstrellas: number;
 }): Reputacion {
   const cerradosComoVendedor = usuario.ventasCompletadas + usuario.devolucionesComoVendedor;
   return {
@@ -71,6 +76,7 @@ export function reputacionDe(usuario: {
       cerradosComoVendedor === 0
         ? null
         : Math.round((usuario.ventasCompletadas / cerradosComoVendedor) * 100),
+    estrellas: estrellasDe(usuario),
   };
 }
 

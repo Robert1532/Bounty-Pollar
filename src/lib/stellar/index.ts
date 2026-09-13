@@ -67,4 +67,23 @@ export async function saldoEscrow(): Promise<{ usdc: string; xlm: string }> {
   return horizon.saldoEscrow();
 }
 
+export async function diagnosticoEscrow(): Promise<{
+  direccion: string;
+  existe: boolean;
+  aceptaUsdc: boolean;
+  saldoUsdc: string | null;
+  saldoXlm: string | null;
+}> {
+  if (esMock()) {
+    return {
+      direccion: mock.direccionEscrowMock(),
+      existe: true,
+      aceptaUsdc: true,
+      saldoUsdc: '0',
+      saldoXlm: '0',
+    };
+  }
+  return horizon.diagnosticoEscrow();
+}
+
 export { registrarDepositoMock } from './mock';

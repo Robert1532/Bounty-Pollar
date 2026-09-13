@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -46,6 +48,7 @@ export const tipoEvento = pgEnum('tipo_evento', [
   'TRATO_EXPIRADO',
   'WEBHOOK_RECIBIDO',
   'EVIDENCIA_ADJUNTADA',
+  'CALIFICACION_RECIBIDA',
 ]);
 
 export const motivoDevolucion = pgEnum('motivo_devolucion', ['PLAZO_VENCIDO', 'ACORDADA']);
@@ -78,6 +81,14 @@ export const users = pgTable('users', {
   volumenVendidoUsdc: numeric('volumen_vendido_usdc', { precision: 20, scale: 7 }).notNull().default('0'),
   /** Cuándo cerró su primer trato: "vende acá desde…" pesa más que un número. */
   primerTratoEn: timestamp('primer_trato_en', { withTimezone: true }),
+
+  /**
+   * Calificaciones recibidas como vendedor. Se guarda la suma y la cantidad,
+   * no el promedio: así sumar una nueva es un UPDATE y no hay que recalcular
+   * nada, y el promedio se deriva cuando se muestra.
+   */
+  calificacionesRecibidas: integer('calificaciones_recibidas').notNull().default(0),
+  sumaEstrellas: integer('suma_estrellas').notNull().default(0),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -184,6 +195,42 @@ export const eventos = pgTable(
 );
 
 /**
+ * Calificación del vendedor: de 1 a 5 estrellas, una sola por trato.
+ *
+ * Es anónima, y eso se sostiene en el esquema, no en una promesa de la
+ * interfaz: **esta tabla no tiene comprador_id**. El permiso para calificar se
+ * verifica contra `tratos.comprador_id` en el momento de escribir y después no
+ * queda rastro de quién puso qué en la fila.
+ *
+ * `trato_id` es único: un trato entregado da derecho a exactamente una
+ * calificación, así que nadie puede inflar ni hundir a un vendedor calificando
+ * varias veces. Y como solo se puede calificar un trato LIBERADO, cada estrella
+ * cuesta una compra real con dinero real — que es justamente lo que no tienen
+ * las reseñas que se compran por internet.
+ */
+export const calificaciones = pgTable(
+  'calificaciones',
+  {
+    id: varchar('id', { length: 24 }).primaryKey(),
+    /** Único: un trato, una calificación. */
+    tratoId: varchar('trato_id', { length: 16 })
+      .notNull()
+      .unique()
+      .references(() => tratos.id, { onDelete: 'cascade' }),
+    /** A quién se calificó. Nunca se guarda quién calificó. */
+    vendedorId: varchar('vendedor_id', { length: 24 })
+      .notNull()
+      .references(() => users.id),
+    estrellas: integer('estrellas').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('calificaciones_vendedor_idx').on(t.vendedorId, t.createdAt),
+    check('calificaciones_rango', sql`${t.estrellas} between 1 and 5`),
+  ],
+);
+
+/**
  * Nonces de login: se emite uno, se firma con SEP-53 y se quema al usarlo. Sin
  * esto, una firma capturada serviria para siempre.
  */
@@ -201,6 +248,7 @@ export const authNonces = pgTable(
 export type User = typeof users.$inferSelect;
 export type Trato = typeof tratos.$inferSelect;
 export type Evento = typeof eventos.$inferSelect;
+export type Calificacion = typeof calificaciones.$inferSelect;
 export type EstadoTrato = (typeof estadoTrato.enumValues)[number];
 export type TipoEvento = (typeof tipoEvento.enumValues)[number];
 export type MotivoDevolucion = (typeof motivoDevolucion.enumValues)[number];

@@ -18,6 +18,13 @@ export interface EstadoSesion {
   pagar: (trato: TratoPublico) => Promise<string>;
   /** Abre el historial de transacciones de Pollar. null en modo demo. */
   abrirHistorial: (() => void) | null;
+  /**
+   * Saldo USDC de la wallet del usuario, en formato decimal.
+   * `null` = desconocido (modo demo o todavía sin cargar): en ese caso no se
+   * bloquea el pago, solo se pierde el aviso previo.
+   */
+  saldoUsdc: string | null;
+  refrescarSaldo: () => Promise<void>;
   refrescar: () => Promise<void>;
 }
 

@@ -12,6 +12,7 @@ import { aStroops, bsAUsdc, normalizarMonto } from '../money';
 import { buscarDeposito, consultarTx, direccionEscrow, enviarDesdeEscrow } from '../stellar';
 import type { CrearTratoInput } from '../validaciones';
 import { aTratoPublico, type TratoPublico } from './dto';
+import { yaFueCalificado } from './calificaciones';
 import { registrarResultado } from './reputacion';
 import {
   almacenamientoHabilitado,
@@ -113,8 +114,12 @@ export async function obtenerTrato(id: string): Promise<Trato> {
  * refrescar el estado después de una acción.
  */
 export async function vistaDeTrato(trato: Trato, usuario?: User | null): Promise<TratoPublico> {
-  const [vendedor] = await db.select().from(users).where(eq(users.id, trato.vendedorId)).limit(1);
-  return aTratoPublico(trato, usuario, vendedor ?? null);
+  const [[vendedor], calificado] = await Promise.all([
+    db.select().from(users).where(eq(users.id, trato.vendedorId)).limit(1),
+    // Solo hace falta preguntarlo cuando el trato pudo ser calificado.
+    trato.estado === 'LIBERADO' ? yaFueCalificado(trato.id) : Promise.resolve(false),
+  ]);
+  return aTratoPublico(trato, usuario, vendedor ?? null, calificado);
 }
 
 export async function listarTratosDe(userId: string): Promise<{ vendo: Trato[]; compro: Trato[] }> {
@@ -636,6 +641,68 @@ export async function evidenciaDe(params: { id: string; actor: User }): Promise<
     hash: trato.evidenciaHash ?? '',
     subidaEn: trato.evidenciaSubidaEn.toISOString(),
     tipo: trato.evidenciaTipo ?? 'image/jpeg',
+  };
+}
+
+/**
+ * Cuánta plata tiene una persona en Caserita, ahora mismo.
+ *
+ * Son cuatro números distintos y conviene no mezclarlos, porque significan
+ * cosas muy distintas para quien los mira:
+ *
+ *   - `porCobrar`  — vendió, el comprador ya pagó y la plata está esperando la
+ *                    entrega. Todavía no es suya, pero va a serlo si entrega.
+ *   - `protegido`  — compró y pagó. Es su plata, retenida; vuelve sola si no
+ *                    le entregan.
+ *   - `cobrado`    — lo que ya cobró de verdad, histórico.
+ *   - `gastado`    — lo que ya pagó por compras completadas.
+ *
+ * El saldo de la wallet NO sale de acá: ese vive en la red y lo lee Pollar en
+ * el cliente. Mezclar un saldo on-chain con una suma de la base sería inventar
+ * un número que nadie puede verificar.
+ */
+export async function resumenDeUsuario(usuario: User): Promise<{
+  porCobrarUsdc: string;
+  tratosPorCobrar: number;
+  protegidoUsdc: string;
+  tratosProtegidos: number;
+  cobradoUsdc: string;
+  gastadoUsdc: string;
+  ventasCompletadas: number;
+  comprasCompletadas: number;
+}> {
+  const [porCobrar, protegido, gastado, fila] = await Promise.all([
+    db
+      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
+      .from(tratos)
+      .where(and(eq(tratos.vendedorId, usuario.id), inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO']))),
+    db
+      .select({ monto: sum(tratos.montoUsdc), cantidad: count() })
+      .from(tratos)
+      .where(
+        and(
+          eq(tratos.compradorId, usuario.id),
+          inArray(tratos.estado, ['FINANCIADO', 'LIBERANDO', 'DEVOLVIENDO']),
+        ),
+      ),
+    db
+      .select({ monto: sum(tratos.montoUsdc) })
+      .from(tratos)
+      .where(and(eq(tratos.compradorId, usuario.id), eq(tratos.estado, 'LIBERADO'))),
+    db.select().from(users).where(eq(users.id, usuario.id)).limit(1),
+  ]);
+
+  const yo = fila[0];
+
+  return {
+    porCobrarUsdc: normalizarMonto(porCobrar[0]?.monto ?? '0'),
+    tratosPorCobrar: porCobrar[0]?.cantidad ?? 0,
+    protegidoUsdc: normalizarMonto(protegido[0]?.monto ?? '0'),
+    tratosProtegidos: protegido[0]?.cantidad ?? 0,
+    cobradoUsdc: normalizarMonto(yo?.volumenVendidoUsdc ?? '0'),
+    gastadoUsdc: normalizarMonto(gastado[0]?.monto ?? '0'),
+    ventasCompletadas: yo?.ventasCompletadas ?? 0,
+    comprasCompletadas: yo?.comprasCompletadas ?? 0,
   };
 }
 
